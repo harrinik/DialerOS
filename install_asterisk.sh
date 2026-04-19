@@ -485,8 +485,20 @@ bind=0.0.0.0:5060
 external_media_address=$PUBLIC_IP
 external_signaling_address=$PUBLIC_IP
 allow_reload=yes
+
+; ── Managed endpoints (written by DialerOS API) ──────────────────────────────
+#include "pjsip_endpoints.conf"
 EOF
-log "PJSIP configured"
+
+# Create the managed endpoints file (DialerOS API writes to this)
+cat > /etc/asterisk/pjsip_endpoints.conf <<'EPEOF'
+; ============================================================
+; DialerOS — PJSIP Endpoints
+; Auto-managed by DialerOS API. Do not edit manually.
+; ============================================================
+EPEOF
+chown asterisk:asterisk /etc/asterisk/pjsip_endpoints.conf
+log "PJSIP configured (with pjsip_endpoints.conf include)"
 
 # ── Queues ───────────────────────────────────────────────────────────────────
 cat > /etc/asterisk/queues.conf <<EOF
