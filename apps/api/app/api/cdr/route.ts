@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { connectDb } from '@/lib/db/connection';
-import { CdrLog } from '@dialer/db';
+import { CdrLog } from '@/lib/db/models/CdrLog';
 import { withUser } from '@/lib/auth/rbac';
 import type { JwtPayload } from '@/lib/auth/jwt';
 
