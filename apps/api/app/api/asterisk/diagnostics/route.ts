@@ -9,8 +9,8 @@ export interface DiagStep {
   label: string;
   status: 'ok' | 'fail' | 'warn' | 'skip';
   detail: string;
-  hint?: string;
-  durationMs?: number;
+  hint?: string | undefined;
+  durationMs?: number | undefined;
 }
 
 export interface DiagReport {
