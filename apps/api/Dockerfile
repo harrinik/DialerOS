@@ -23,26 +23,14 @@ RUN pnpm --filter @dialer/shared build
 RUN pnpm --filter @dialer/db     build
 RUN pnpm --filter @dialer/api    build
 
-# Debug: show what standalone produced so we can fix path issues
-RUN echo "=== standalone contents ===" \
-    && find apps/api/.next/standalone -maxdepth 3 -name "server.js" 2>/dev/null \
-    || echo "WARNING: no server.js found in standalone"
+# Debug: show where server.js landed so we can verify the path used in CMD
+RUN echo "=== Standalone output ===" \
+    && find apps/api/.next/standalone -name "server.js" -maxdepth 5 2>/dev/null \
+    && echo "=== .next top-level ===" \
+    && ls -la apps/api/.next/ 2>/dev/null \
+    || echo "(standalone dir not found)"
 
-# Locate server.js (monorepo root vs nested) and normalise to one location.
-# outputFileTracingRoot=../../ causes Next 14 to emit:
-#   apps/api/.next/standalone/apps/api/server.js  (monorepo-aware path)
-# Without it Next falls back to:
-#   apps/api/.next/standalone/server.js
-RUN SERVER_JS=$(find apps/api/.next/standalone -name "server.js" -maxdepth 4 2>/dev/null | head -1) \
-    && if [ -z "$SERVER_JS" ]; then \
-         echo "ERROR: Next.js standalone build not produced."; \
-         echo "  Ensure next.config.ts has:  output: 'standalone'"; \
-         echo "  and outputFileTracingRoot set to path.join(__dirname, '../../')"; \
-         exit 1; \
-       fi \
-    && echo "Found server.js at: $SERVER_JS"
-
-# Ensure public dir exists so COPY never fails (Next.js public is optional)
+# Ensure public dir exists — Next.js public/ is optional but COPY requires source
 RUN mkdir -p apps/api/public
 
 # ── Production image ───────────────────────────────────────────────────────
@@ -55,21 +43,19 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs \
  && adduser  --system --uid 1001 nextjs
 
-# Copy the entire standalone bundle (contains server.js + bundled node_modules)
+# Copy the full standalone bundle (self-contained, includes bundled node_modules)
 COPY --from=builder --chown=nextjs:nodejs /app/apps/api/.next/standalone ./
 
-# Copy static assets
+# Copy static assets and public dir
 COPY --from=builder --chown=nextjs:nodejs /app/apps/api/.next/static ./apps/api/.next/static
-
-# Copy public dir (always exists due to mkdir above)
-COPY --from=builder --chown=nextjs:nodejs /app/apps/api/public ./apps/api/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/api/public        ./apps/api/public
 
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Dynamically find server.js to handle both monorepo and root placement:
-#   /app/apps/api/server.js   (with outputFileTracingRoot)
-#   /app/server.js            (without outputFileTracingRoot)
+# Find server.js at runtime — handles both:
+#   /app/server.js                    (flat output, no outputFileTracingRoot)
+#   /app/apps/api/server.js           (monorepo-aware output)
 CMD ["sh", "-c", "node $(find /app -maxdepth 4 -name 'server.js' 2>/dev/null | head -1)"]
