@@ -13,7 +13,12 @@ export const GET = withUser(async (_req: NextRequest, _user: JwtPayload) => {
     const endpoints = await ariGet<Array<{ id: string; state: string; channel_ids: string[] }>>('/endpoints/PJSIP');
     return NextResponse.json({ data: endpoints });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 502 });
+    // Asterisk returns 404 when NO PJSIP endpoints are configured yet — treat as empty list
+    const msg = String(err);
+    if (msg.includes('404') || msg.includes('No Endpoints found')) {
+      return NextResponse.json({ data: [] });
+    }
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 });
 

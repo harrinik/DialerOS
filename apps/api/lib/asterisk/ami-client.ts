@@ -32,11 +32,25 @@ class AmiClient extends EventEmitter {
     this.config = cfg;
   }
 
-  async connect(): Promise<void> {
+  async connect(timeoutMs = 10_000): Promise<void> {
     if (!this.config) throw new Error('AMI not configured');
+
+    // Destroy any stale socket before creating a new one
+    if (this.socket) {
+      this.socket.destroy();
+      this.socket = null;
+    }
+
     return new Promise((resolve, reject) => {
       const sock = createConnection({ host: this.config!.host, port: this.config!.port });
       this.socket = sock;
+
+      // TCP-level connection timeout — fires if the SYN is silently dropped
+      sock.setTimeout(timeoutMs);
+      sock.once('timeout', () => {
+        sock.destroy();
+        reject(new Error(`AMI TCP connect timed out after ${timeoutMs}ms — check host, port, and firewall`));
+      });
 
       const onError = (err: Error) => {
         this.connected = false;
@@ -53,8 +67,9 @@ class AmiClient extends EventEmitter {
       });
       sock.on('error', (err) => this.emit('error', err));
 
-      // AMI sends a banner line first
+      // AMI sends a banner line first — clear timeout once connected
       this.once('_banner', async () => {
+        sock.setTimeout(0);  // disable timeout after banner received
         sock.removeListener('error', onError);
         try {
           await this.login();
