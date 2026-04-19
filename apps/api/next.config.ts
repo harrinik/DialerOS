@@ -1,9 +1,14 @@
 import type { NextConfig } from 'next';
+import path from 'path';
 
 const nextConfig: NextConfig = {
-  output: 'standalone', // Required for Docker — generates apps/api/.next/standalone
+  output: 'standalone', // Required for Docker — generates .next/standalone/server.js
   experimental: {
     typedRoutes: true,
+    // CRITICAL for pnpm monorepos: tells Next.js where the monorepo root is.
+    // Without this, the standalone bundle cannot trace shared package dependencies
+    // and server.js is either missing or broken.
+    outputFileTracingRoot: path.join(__dirname, '../../'),
   },
   serverExternalPackages: [
     'mongoose',
