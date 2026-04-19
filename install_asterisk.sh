@@ -497,7 +497,10 @@ cat > /etc/asterisk/pjsip_endpoints.conf <<'EPEOF'
 ; Auto-managed by DialerOS API. Do not edit manually.
 ; ============================================================
 EPEOF
+# 666 so the Docker container (nextjs/UID 1001) can write via bind mount
+# Asterisk only reads this file — write access for the API is intentional
 chown asterisk:asterisk /etc/asterisk/pjsip_endpoints.conf
+chmod 666 /etc/asterisk/pjsip_endpoints.conf
 log "PJSIP configured (with pjsip_endpoints.conf include)"
 
 # ── Queues ───────────────────────────────────────────────────────────────────
