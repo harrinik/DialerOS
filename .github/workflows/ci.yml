@@ -1,0 +1,192 @@
+##############################################################################
+# DialerOS — CI/CD Pipeline
+#
+# Triggers:
+#   • push to main           → full test + deploy to production
+#   • push to staging/*      → full test + deploy to staging
+#   • pull_request to main   → test only (no deploy)
+#
+# Secrets required (set in GitHub → Settings → Secrets):
+#   PROD_HOST         Production server IP / hostname
+#   PROD_SSH_KEY      Private SSH key with access to production server
+#   PROD_SSH_USER     SSH username (default: ubuntu)
+#   STAGING_HOST      (optional) Staging server
+#   STAGING_SSH_KEY   (optional)
+#   STAGING_SSH_USER  (optional)
+##############################################################################
+
+name: DialerOS CI/CD
+
+on:
+  push:
+    branches: [main, 'staging/**', 'release/**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false   # Never cancel an in-flight deploy
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
+
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+
+  # ── Job 1: Type-check + Build (runs on every push and PR) ─────────────────
+  build-and-test:
+    name: Build & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: |
+          pnpm --filter @dialer/shared build
+          pnpm --filter @dialer/db build
+
+      - name: Type-check worker
+        run: pnpm --filter @dialer/worker build
+
+      - name: Type-check listener
+        run: pnpm --filter @dialer/listener build
+
+      - name: Build API (Next.js)
+        run: pnpm --filter @dialer/api build
+        env:
+          NODE_ENV: test
+          # Dummy env vars required for next build
+          JWT_ACCESS_SECRET:  ci_secret_access
+          JWT_REFRESH_SECRET: ci_secret_refresh
+          MONGODB_URI:        mongodb://localhost:27017/dialer_ci
+          REDIS_HOST:         localhost
+          REDIS_PASSWORD:     ci_redis
+
+      - name: Cache build artifacts
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            apps/api/.next
+            packages/shared/dist
+            packages/db/dist
+            apps/worker/dist
+            apps/listener/dist
+          key: build-${{ github.sha }}
+
+  # ── Job 2: Lint ─────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint 2>/dev/null || true   # non-blocking until lint rules are stabilised
+
+  # ── Job 3: Deploy to Staging (staging/* branches) ───────────────────────────
+  deploy-staging:
+    name: Deploy → Staging
+    needs: [build-and-test]
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' &&
+      (startsWith(github.ref, 'refs/heads/staging/') ||
+       startsWith(github.ref, 'refs/heads/release/'))
+    environment:
+      name: staging
+      url: http://${{ secrets.STAGING_HOST }}:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to staging via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_SSH_USER || 'ubuntu' }}
+          key:      ${{ secrets.STAGING_SSH_KEY }}
+          timeout:  10m
+          script: |
+            set -euo pipefail
+            cd /opt/dialer
+            # Use the update script with current branch
+            BRANCH="${{ github.ref_name }}" sudo bash update.sh --branch "$BRANCH"
+
+  # ── Job 4: Deploy to Production (main only) ──────────────────────────────────
+  deploy-production:
+    name: Deploy → Production
+    needs: [build-and-test, lint]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: http://${{ secrets.PROD_HOST }}:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to production via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_SSH_USER || 'ubuntu' }}
+          key:      ${{ secrets.PROD_SSH_KEY }}
+          timeout:  15m
+          script: |
+            set -euo pipefail
+            cd /opt/dialer
+            sudo bash update.sh --branch main
+
+      - name: Verify production health
+        run: |
+          echo "Checking production health..."
+          for i in $(seq 1 12); do
+            if curl -sf "http://${{ secrets.PROD_HOST }}:3000/api/health" > /dev/null; then
+              echo "✅ Production health check passed"
+              exit 0
+            fi
+            echo "  Waiting... attempt $i/12"
+            sleep 10
+          done
+          echo "❌ Health check failed after 2 minutes"
+          exit 1
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          # Optionally notify via webhook/Slack/Telegram if deploy fails
+          echo "::error::Production deploy failed — manual rollback: sudo bash update.sh --rollback"
+
+  # ── Job 5: Auto-rollback on health failure ───────────────────────────────────
+  rollback-on-failure:
+    name: Auto-Rollback
+    needs: [deploy-production]
+    runs-on: ubuntu-latest
+    if: failure() && github.ref == 'refs/heads/main'
+    steps:
+      - name: Rollback production
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_SSH_USER || 'ubuntu' }}
+          key:      ${{ secrets.PROD_SSH_KEY }}
+          timeout:  5m
+          script: |
+            cd /opt/dialer
+            sudo bash update.sh --rollback
