@@ -51,8 +51,9 @@ function parseConf(content: string): ConfSection[] {
     if (!current) continue;
     const kv = /^([^=]+)=(.*)$/.exec(line);
     if (!kv) continue;
-    const key = kv[1].trim();
-    const val = kv[2].trim();
+    const key = (kv[1] ?? '').trim();
+    const val = (kv[2] ?? '').trim();
+    if (!key) continue;
     if (key === 'type') { current.type = val; }
     else { (current.attrs[key] ??= []).push(val); }
   }
