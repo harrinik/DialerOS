@@ -5,12 +5,17 @@ import { AuthProvider } from '@/lib/auth/AuthContext';
 export const metadata: Metadata = {
   title: 'DialerOS — Predictive Dialer',
   description: 'Production-grade outbound predictive dialer control panel',
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

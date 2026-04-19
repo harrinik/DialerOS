@@ -44,7 +44,16 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const s: Socket = io(process.env['NEXT_PUBLIC_GATEWAY_URL'] ?? 'http://localhost:3001', {
+    // Derive gateway URL dynamically from the current hostname.
+    // NEXT_PUBLIC_GATEWAY_URL is baked at build time, so it can't know the
+    // runtime server IP. Using window.location.hostname ensures the WebSocket
+    // always connects to the correct server regardless of deployment target.
+    const protocol    = window.location.protocol === 'https:' ? 'https' : 'http';
+    const gatewayHost = window.location.hostname;
+    const gatewayPort = process.env['NEXT_PUBLIC_GATEWAY_PORT'] ?? '3001';
+    const gatewayUrl  = `${protocol}://${gatewayHost}:${gatewayPort}`;
+
+    const s: Socket = io(gatewayUrl, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: Infinity,
     });
