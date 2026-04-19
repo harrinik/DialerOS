@@ -53,14 +53,38 @@ BUILD_DIR="$SRC_DIR/asterisk-build"
 TAR_FILE="asterisk-22-current.tar.gz"
 INSTALL_LOG="/var/log/dialeros-install.log"
 
+# ── IPv4-only public IP detection ───────────────────────────────────────────
+# -4 forces IPv4, prevents getting an IPv6 address on dual-stack hosts
+get_public_ipv4() {
+  local ip
+  # Try multiple services with explicit IPv4 flag and timeout
+  for svc in \
+    "https://api4.ipify.org" \
+    "https://ipv4.icanhazip.com" \
+    "https://checkip.amazonaws.com" \
+    "https://ifconfig.me/ip" \
+    "http://ipv4bot.whatismyipaddress.com"; do
+    ip=$(curl -4 -s --max-time 8 --retry 2 "$svc" 2>/dev/null | tr -d '[:space:]')
+    # Validate it's a proper IPv4 (not empty, not an IPv6, not HTML)
+    if [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+      echo "$ip"
+      return 0
+    fi
+  done
+  # Last resort: try the primary non-loopback interface
+  ip=$(ip -4 route get 8.8.8.8 2>/dev/null | awk '/src/{print $7}' | head -1)
+  if [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+    echo "$ip"
+    return 0
+  fi
+  echo '127.0.0.1'
+}
+
 ARI_USER="${ARI_USER:-dialer}"
 ARI_PASS="${ARI_PASS:-$(openssl rand -base64 24 | tr -d '/+=')}"
 AMI_USER="${AMI_USER:-dialer}"
 AMI_PASS="${AMI_PASS:-$(openssl rand -base64 24 | tr -d '/+=')}"
-PUBLIC_IP="${PUBLIC_IP:-$(curl -s --max-time 15 ifconfig.me 2>/dev/null || \
-                          curl -s --max-time 15 api.ipify.org 2>/dev/null || \
-                          curl -s --max-time 15 icanhazip.com 2>/dev/null || \
-                          echo '127.0.0.1')}"
+PUBLIC_IP="${PUBLIC_IP:-$(get_public_ipv4)}"
 
 SOUNDS_DIR="/var/lib/asterisk/sounds/dialer"
 RECORDINGS_DIR="/var/spool/asterisk/monitor"
@@ -69,6 +93,7 @@ RECORDINGS_DIR="/var/spool/asterisk/monitor"
 exec > >(tee -a "$INSTALL_LOG") 2>&1
 section "DialerOS Asterisk Installer — $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 info "Log: $INSTALL_LOG"
+info "Public IPv4: $PUBLIC_IP"
 
 ###############################################################################
 # DETECT OS
@@ -87,24 +112,67 @@ fi
 ###############################################################################
 section "Cleaning Previous Installation"
 
-if systemctl list-units --type=service 2>/dev/null | grep -q asterisk; then
-  info "Stopping existing Asterisk..."
-  systemctl stop asterisk 2>/dev/null || true
+# ── Check if Asterisk is already installed ───────────────────────────────────
+ASTERISK_INSTALLED=false
+if command -v asterisk &>/dev/null || systemctl list-units --type=service 2>/dev/null | grep -q asterisk; then
+  ASTERISK_INSTALLED=true
 fi
 
-if command -v asterisk &>/dev/null; then
-  warn "Existing Asterisk detected → removing..."
+if [[ "$ASTERISK_INSTALLED" == "true" ]]; then
+  AST_VER=$(asterisk -V 2>/dev/null | head -1 || echo "unknown version")
+  echo ""
+  echo -e "${YELLOW}╔═══════════════════════════════════════════════════════╗${NC}"
+  echo -e "${YELLOW}║  Asterisk is already installed: $AST_VER"
+  echo -e "${YELLOW}╚═══════════════════════════════════════════════════════╝${NC}"
+  echo ""
+
+  if [[ "$NON_INTERACTIVE" == "--non-interactive" ]]; then
+    # When called from setup.sh in non-interactive mode, always do clean install
+    CLEAN_INSTALL=true
+    warn "Non-interactive mode — performing clean reinstall"
+  else
+    echo -e "  ${BOLD}Options:${NC}"
+    echo -e "  ${CYAN}[1]${NC} Clean reinstall  — removes existing Asterisk, builds fresh from source"
+    echo -e "  ${CYAN}[2]${NC} Skip install     — keep existing Asterisk, only rewrite config files"
+    echo -e "  ${CYAN}[3]${NC} Abort            — exit without making any changes"
+    echo ""
+    CLEAN_INSTALL=false
+    SKIP_INSTALL=false
+    read -r -p "  Your choice [1/2/3]: " _CHOICE
+    case "$_CHOICE" in
+      1) CLEAN_INSTALL=true;  info "Clean reinstall selected" ;;
+      2) SKIP_INSTALL=true;   info "Skipping Asterisk build — will only rewrite configs" ;;
+      3) info "Aborted by user"; exit 0 ;;
+      *) warn "Invalid choice — defaulting to skip (safe option)"; SKIP_INSTALL=true ;;
+    esac
+  fi
+else
+  CLEAN_INSTALL=false
+  SKIP_INSTALL=false
+fi
+
+if [[ "${CLEAN_INSTALL:-false}" == "true" ]]; then
+  info "Removing existing Asterisk installation..."
+  systemctl stop asterisk 2>/dev/null || true
   apt-get remove --purge -y asterisk 2>/dev/null || true
   rm -rf /etc/asterisk /var/lib/asterisk /var/log/asterisk /usr/lib/asterisk 2>/dev/null || true
+  log "Existing Asterisk removed"
 fi
 
-rm -rf "$BUILD_DIR" "$SRC_DIR"/asterisk-22* 2>/dev/null || true
-mkdir -p "$BUILD_DIR"
-log "Clean complete"
+if [[ "${SKIP_INSTALL:-false}" != "true" ]]; then
+  rm -rf "$BUILD_DIR" "$SRC_DIR"/asterisk-22* 2>/dev/null || true
+  mkdir -p "$BUILD_DIR"
+fi
+log "Pre-install check complete"
 
 ###############################################################################
-# SYSTEM DEPENDENCIES — self-healing package installs
+# SYSTEM DEPENDENCIES
 ###############################################################################
+if [[ "${SKIP_INSTALL:-false}" == "true" ]]; then
+  section "Skipping Build — Rewriting Configs Only"
+  info "Asterisk binary kept. Jumping straight to configuration."
+else
+
 section "Installing System Dependencies"
 
 # Step 1: Enable universe/multiverse repos (needed for many codec libs)
@@ -290,23 +358,25 @@ for mod in "${MODULES[@]}"; do
 done
 
 # Compile — use all CPU cores, fall back to single core if parallel fails
-info "Compiling (using $(nproc) cores)..."
-if ! make -j"$(nproc)" 2>&1 | tail -5; then
-  warn "Parallel compile failed — retrying with single core..."
-  make 2>&1 | tail -5 || error "make failed. See $INSTALL_LOG"
-fi
+  info "Compiling (using $(nproc) cores)..."
+  if ! make -j"$(nproc)" 2>&1 | tail -5; then
+    warn "Parallel compile failed — retrying with single core..."
+    make 2>&1 | tail -5 || error "make failed. See $INSTALL_LOG"
+  fi
 
-info "Installing binaries..."
-make install 2>&1 | tail -5 || error "make install failed"
+  info "Installing binaries..."
+  make install 2>&1 | tail -5 || error "make install failed"
 
-info "Installing sample configs..."
-make samples 2>&1 | tail -3 || warn "make samples failed (non-critical)"
+  info "Installing sample configs..."
+  make samples 2>&1 | tail -3 || warn "make samples failed (non-critical)"
 
-info "Installing init scripts..."
-make config  2>&1 | tail -3 || warn "make config failed (non-critical)"
+  info "Installing init scripts..."
+  make config  2>&1 | tail -3 || warn "make config failed (non-critical)"
 
-ldconfig 2>/dev/null || true
-log "Asterisk compiled and installed"
+  ldconfig 2>/dev/null || true
+  log "Asterisk compiled and installed"
+
+fi  # end of SKIP_INSTALL check
 
 ###############################################################################
 # USER & PERMISSIONS
@@ -323,7 +393,7 @@ chown -R asterisk:asterisk \
 chmod -R 775 "$SOUNDS_DIR" "$RECORDINGS_DIR" 2>/dev/null || true
 
 # Patch asterisk.conf to run as asterisk user
-for f in /etc/asterisk/asterisk.conf; do
+  for f in /etc/asterisk/asterisk.conf; do
   [[ -f "$f" ]] && {
     sed -i 's/;runuser = asterisk/runuser = asterisk/' "$f"
     sed -i 's/;rungroup = asterisk/rungroup = asterisk/' "$f"

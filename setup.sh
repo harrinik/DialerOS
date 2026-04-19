@@ -72,7 +72,7 @@ if [[ "$_KEY_VERIFIED" != "true" ]]; then
   echo -e "${RED}╚═══════════════════════════════════════════════════════╝${NC}"
   echo ""
   # Write a tamper-detection marker so the owner can audit failed attempts
-  echo "FAILED_ATTEMPT host=$(hostname) time=$(date -u +%Y-%m-%dT%H:%M:%SZ) ip=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || echo unknown)" \
+  echo "FAILED_ATTEMPT host=$(hostname) time=$(date -u +%Y-%m-%dT%H:%M:%SZ) ip=$(curl -4 -s --max-time 5 api4.ipify.org 2>/dev/null || echo unknown)" \
     >> /tmp/.dialeros_failed_attempts 2>/dev/null || true
   exit 1
 fi
@@ -114,9 +114,28 @@ AMI_PASS=$(gen_pass)
 ADMIN_EMAIL="admin@dialer.local"
 ADMIN_PASSWORD=$(gen_pass)
 
-PUBLIC_IP=$(curl -s --max-time 10 ifconfig.me 2>/dev/null || curl -s --max-time 10 icanhazip.com 2>/dev/null || echo "127.0.0.1")
+# ── IPv4-only public IP detection ───────────────────────────────────────────────
+get_public_ipv4() {
+  local ip
+  for svc in \
+    "https://api4.ipify.org" \
+    "https://ipv4.icanhazip.com" \
+    "https://checkip.amazonaws.com" \
+    "https://ifconfig.me/ip"; do
+    ip=$(curl -4 -s --max-time 8 --retry 2 "$svc" 2>/dev/null | tr -d '[:space:]')
+    if [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+      echo "$ip"; return 0
+    fi
+  done
+  # Local fallback: primary non-loopback interface
+  ip=$(ip -4 route get 8.8.8.8 2>/dev/null | awk '/src/{print $7}' | head -1)
+  [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] && { echo "$ip"; return 0; }
+  echo '127.0.0.1'
+}
+
+PUBLIC_IP=$(get_public_ipv4)
 log "Secrets generated"
-log "Public IP: $PUBLIC_IP"
+log "Public IPv4: $PUBLIC_IP"
 
 ###############################################################################
 # GATE-1  ·  MID-INSTALL RE-VERIFICATION
@@ -188,8 +207,53 @@ docker compose version &>/dev/null || error "docker compose plugin not found"
 # 4. INSTALL & CONFIGURE ASTERISK ON THE HOST
 ###############################################################################
 section "Installing Asterisk on Host"
-info "This takes 10-20 minutes (compiling from source)..."
 
+# Check if this is a re-run (platform already set up)
+PLATFORM_ALREADY_INSTALLED=false
+if command -v asterisk &>/dev/null && docker compose ps 2>/dev/null | grep -q "running"; then
+  PLATFORM_ALREADY_INSTALLED=true
+fi
+
+if [[ "$PLATFORM_ALREADY_INSTALLED" == "true" ]]; then
+  echo ""
+  echo -e "${YELLOW}╔═══════════════════════════════════════════════════════╗${NC}"
+  echo -e "${YELLOW}║   DialerOS appears to already be installed on this    ║${NC}"
+  echo -e "${YELLOW}║   server. What would you like to do?                  ║${NC}"
+  echo -e "${YELLOW}╚═══════════════════════════════════════════════════════╝${NC}"
+  echo ""
+  echo -e "  ${CYAN}[1]${NC} Full clean reinstall  — tears down Docker, removes Asterisk, installs fresh"
+  echo -e "  ${CYAN}[2]${NC} Update only           — pulls latest code, rebuilds images, zero downtime"
+  echo -e "  ${CYAN}[3]${NC} Reconfigure only      — rewrites .env and Asterisk configs, restarts services"
+  echo -e "  ${CYAN}[4]${NC} Abort                 — exit without any changes"
+  echo ""
+  read -r -p "  Your choice [1/2/3/4]: " _SETUP_CHOICE
+  case "$_SETUP_CHOICE" in
+    1)
+      info "Full clean reinstall selected — tearing down current installation..."
+      docker compose down -v 2>/dev/null || true
+      info "Proceeding with fresh install..."
+      ;;
+    2)
+      info "Update mode — running zero-downtime update..."
+      bash "$PROJECT_DIR/update.sh" --branch main
+      exit 0
+      ;;
+    3)
+      info "Reconfigure mode — will rewrite configs and restart services"
+      # Export vars so install_asterisk.sh only rewrites configs (SKIP_INSTALL)
+      export NON_INTERACTIVE="--non-interactive"
+      export SKIP_ASTERISK_REBUILD=true
+      ;;
+    4)
+      info "Aborted by user"; exit 0
+      ;;
+    *)
+      warn "Invalid choice — aborting to be safe"; exit 1
+      ;;
+  esac
+fi
+
+info "This takes 10-20 minutes (compiling from source)..."
 export ARI_USER ARI_PASS AMI_USER AMI_PASS PUBLIC_IP
 bash "$PROJECT_DIR/install_asterisk.sh" --non-interactive
 log "Asterisk installed and configured"
