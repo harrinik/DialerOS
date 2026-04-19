@@ -43,7 +43,7 @@ function parseConf(content: string): ConfSection[] {
     if (!line || line.startsWith(';')) continue;
 
     const sectionMatch = /^\[([^\]]+)\]/.exec(line);
-    if (sectionMatch) {
+    if (sectionMatch?.[1]) {
       if (current) sections.push(current);
       current = { id: sectionMatch[1], type: '', attrs: {} };
       continue;
