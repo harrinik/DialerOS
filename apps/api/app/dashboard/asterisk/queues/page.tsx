@@ -26,7 +26,7 @@ export default function QueuesPage() {
   const [addExt, setAddExt] = useState('');
   const [error, setError] = useState('');
 
-  const token = () => localStorage.getItem('access_token') ?? '';
+  const token = () => localStorage.getItem('dialer_access_token') ?? '';
   const h = () => ({ Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' });
 
   const load = () => {

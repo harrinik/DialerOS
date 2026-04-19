@@ -33,7 +33,7 @@ export default function ContactsPage() {
   const [total, setTotal] = useState(0);
   const LIMIT = 50;
 
-  const token = () => localStorage.getItem('access_token') ?? '';
+  const token = () => localStorage.getItem('dialer_access_token') ?? '';
 
   useEffect(() => {
     fetch('/api/campaigns', { headers: { Authorization: `Bearer ${token()}` } })

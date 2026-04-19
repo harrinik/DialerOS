@@ -185,7 +185,7 @@ export default function IvrBuilderCanvasPage() {
   const [isLoading, setIsLoading] = useState(!isNew);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
 
-  const token = () => localStorage.getItem('access_token') ?? '';
+  const token = () => localStorage.getItem('dialer_access_token') ?? '';
 
   // Load campaigns for the picker
   useEffect(() => {

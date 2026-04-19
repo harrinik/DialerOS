@@ -23,7 +23,7 @@ export default function RecordingsPage() {
   const [error, setError] = useState('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const token = () => localStorage.getItem('access_token') ?? '';
+  const token = () => localStorage.getItem('dialer_access_token') ?? '';
   const h = () => ({ Authorization: `Bearer ${token()}` });
 
   const load = () => {

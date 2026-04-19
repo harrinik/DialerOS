@@ -8,8 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CheckCircle2, XCircle, Loader2, Radio, Server, HardDrive, PhoneCall, RefreshCw, AlertCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, Radio, Server, HardDrive, RefreshCw, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth/AuthContext';
 
 interface Settings {
   ariHost: string; ariPort: number; ariUser: string;
@@ -41,6 +42,7 @@ const DEFAULT: Settings = {
 };
 
 export default function AsteriskHubPage() {
+  const { accessToken } = useAuth();  // ← token from context, not localStorage
   const [settings, setSettings] = useState<Settings>(DEFAULT);
   // Passwords are kept separate — never pre-filled from server (security)
   const [ariPassword, setAriPassword]   = useState('');
@@ -57,9 +59,9 @@ export default function AsteriskHubPage() {
   const [saved,    setSaved]    = useState(false);
 
   const getHeaders = useCallback(() => ({
-    Authorization: `Bearer ${localStorage.getItem('access_token') ?? ''}`,
+    Authorization: `Bearer ${accessToken ?? ''}`,
     'Content-Type': 'application/json',
-  }), []);
+  }), [accessToken]);
 
   // Load settings from server on mount
   const loadSettings = useCallback(async () => {

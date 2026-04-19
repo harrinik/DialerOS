@@ -42,7 +42,7 @@ export default function CampaignDetailPage() {
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
 
-  const token = () => localStorage.getItem('access_token') ?? '';
+  const token = () => localStorage.getItem('dialer_access_token') ?? '';
 
   const fetchCampaign = async () => {
     const r = await fetch(`/api/campaigns/${id}`, { headers: { Authorization: `Bearer ${token()}` } });

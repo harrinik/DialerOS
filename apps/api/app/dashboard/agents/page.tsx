@@ -30,7 +30,7 @@ export default function AgentsPage() {
   const [form, setForm] = useState({ name: '', extension: '', sipEndpoint: '', maxConcurrentCalls: 1 });
   const [saving, setSaving] = useState(false);
 
-  const token = () => localStorage.getItem('access_token') ?? '';
+  const token = () => localStorage.getItem('dialer_access_token') ?? '';
 
   const fetchAgents = () => {
     fetch('/api/agents', { headers: { Authorization: `Bearer ${token()}` } })

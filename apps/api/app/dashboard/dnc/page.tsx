@@ -21,7 +21,7 @@ export default function DncPage() {
   const [checkPhone, setCheckPhone] = useState('');
   const [checkResult, setCheckResult] = useState<null | { isBlocked: boolean }>(null);
 
-  const token = () => localStorage.getItem('access_token') ?? '';
+  const token = () => localStorage.getItem('dialer_access_token') ?? '';
 
   const fetchDnc = () => {
     fetch('/api/dnc', { headers: { Authorization: `Bearer ${token()}` } })

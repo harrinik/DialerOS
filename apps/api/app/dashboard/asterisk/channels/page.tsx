@@ -35,7 +35,7 @@ export default function ChannelsPage() {
   const [actionPending, setActionPending] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
-  const token = () => localStorage.getItem('access_token') ?? '';
+  const token = () => localStorage.getItem('dialer_access_token') ?? '';
   const h = () => ({ Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' });
 
   const load = useCallback(() => {

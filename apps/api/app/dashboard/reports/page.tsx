@@ -32,7 +32,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [granularity, setGranularity] = useState<'hour' | 'day' | 'week'>('day');
 
-  const token = () => localStorage.getItem('access_token') ?? '';
+  const token = () => localStorage.getItem('dialer_access_token') ?? '';
 
   useEffect(() => {
     setLoading(true);

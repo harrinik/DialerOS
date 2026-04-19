@@ -29,7 +29,7 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ status: '', q: '' });
 
-  const token = () => localStorage.getItem('access_token') ?? '';
+  const token = () => localStorage.getItem('dialer_access_token') ?? '';
 
   const fetchCampaigns = () => {
     const params = new URLSearchParams();

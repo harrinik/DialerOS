@@ -31,7 +31,7 @@ export default function AudioLibraryPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const token = () => localStorage.getItem('access_token') ?? '';
+  const token = () => localStorage.getItem('dialer_access_token') ?? '';
   const h = () => ({ Authorization: `Bearer ${token()}` });
 
   const load = () => {
