@@ -7,12 +7,11 @@ import type { JwtPayload } from '@/lib/auth/jwt';
 
 export const GET = withUser(async (_req: NextRequest, _user: JwtPayload) => {
   await connectDb();
-  const s = await AsteriskSettings.findOne({}).lean();
+  const s = await AsteriskSettings.findOne({}).lean() as unknown as Record<string, unknown> | null;
   if (!s) return NextResponse.json({ data: null });
 
   // Never return raw passwords — return boolean flags indicating whether they're set.
-  // The UI uses these flags to show "unchanged — set" placeholder text.
-  const { ariPassword, amiPassword, ...safe } = s as Record<string, unknown>;
+  const { ariPassword, amiPassword, ...safe } = s;
   return NextResponse.json({
     data: {
       ...safe,
@@ -41,7 +40,8 @@ export const PUT = withUser(async (req: NextRequest, _user: JwtPayload) => {
   );
   invalidateAriCache();
 
-  const { ariPassword, amiPassword, ...safe } = s.toObject() as Record<string, unknown>;
+  const obj = (s.toObject() as unknown) as Record<string, unknown>;
+  const { ariPassword, amiPassword, ...safe } = obj;
   return NextResponse.json({
     data: {
       ...safe,
