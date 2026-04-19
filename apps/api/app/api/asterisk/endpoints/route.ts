@@ -24,7 +24,6 @@ import type { JwtPayload } from '@/lib/auth/jwt';
 
 const CONF_DIR        = process.env.ASTERISK_CONF_DIR ?? '/etc/asterisk';
 const ENDPOINTS_FILE  = path.join(CONF_DIR, 'pjsip_endpoints.conf');
-const PJSIP_CONF_FILE = path.join(CONF_DIR, 'pjsip.conf');
 
 // ── Config parser ─────────────────────────────────────────────────────────────
 
@@ -94,13 +93,10 @@ async function readEndpoints(): Promise<ConfSection[]> {
 
 async function writeEndpoints(sections: ConfSection[]): Promise<void> {
   await fs.writeFile(ENDPOINTS_FILE, renderConf(sections), 'utf-8');
-
-  // Ensure pjsip.conf includes it
-  let pjsip = '';
-  try { pjsip = await fs.readFile(PJSIP_CONF_FILE, 'utf-8'); } catch { /* file missing — skip */ }
-  if (!pjsip.includes('pjsip_endpoints.conf')) {
-    await fs.appendFile(PJSIP_CONF_FILE, '\n#include "pjsip_endpoints.conf"\n', 'utf-8');
-  }
+  // NOTE: pjsip.conf must already contain:
+  //   #include "pjsip_endpoints.conf"
+  // This is added by install_asterisk.sh and the setup one-time command.
+  // The API never modifies pjsip.conf directly.
 }
 
 async function reloadPjsip(): Promise<void> {
