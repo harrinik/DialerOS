@@ -80,8 +80,8 @@ export default function CdrPage() {
   // Filters
   const [from, setFrom]           = useState('');
   const [to, setTo]               = useState('');
-  const [typeFilter, setTypeFilter]     = useState('');
-  const [dispFilter, setDispFilter]     = useState('');
+  const [typeFilter, setTypeFilter]     = useState('all');
+  const [dispFilter, setDispFilter]     = useState('all');
   const [srcFilter, setSrcFilter]       = useState('');
   const [dstFilter, setDstFilter]       = useState('');
 
@@ -91,8 +91,8 @@ export default function CdrPage() {
       const params = new URLSearchParams({ page: String(p), limit: '50' });
       if (from)       params.set('from', new Date(from).toISOString());
       if (to)         params.set('to',   new Date(to).toISOString());
-      if (typeFilter) params.set('type', typeFilter);
-      if (dispFilter) params.set('disposition', dispFilter);
+      if (typeFilter && typeFilter !== 'all') params.set('type', typeFilter);
+      if (dispFilter && dispFilter !== 'all') params.set('disposition', dispFilter);
       if (srcFilter)  params.set('src', srcFilter);
       if (dstFilter)  params.set('dst', dstFilter);
 
@@ -177,7 +177,7 @@ export default function CdrPage() {
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="text-xs"><SelectValue placeholder="All types" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All types</SelectItem>
+                  <SelectItem value="all">All types</SelectItem>
                   <SelectItem value="internal">Internal</SelectItem>
                   <SelectItem value="inbound">Inbound</SelectItem>
                   <SelectItem value="outbound">Outbound</SelectItem>
@@ -190,7 +190,7 @@ export default function CdrPage() {
               <Select value={dispFilter} onValueChange={setDispFilter}>
                 <SelectTrigger className="text-xs"><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   <SelectItem value="ANSWERED">Answered</SelectItem>
                   <SelectItem value="NO ANSWER">No Answer</SelectItem>
                   <SelectItem value="BUSY">Busy</SelectItem>
