@@ -129,4 +129,9 @@ export class RealtimeGateway {
   get clientCount(): number {
     return this.io.engine.clientsCount;
   }
+
+  /** Emit any raw named event to all global room clients (used by AMI CDR listener) */
+  emitRawEvent(event: string, payload: unknown): void {
+    this.io.to(SOCKET_ROOMS.GLOBAL).emit(event, payload);
+  }
 }

@@ -17,8 +17,9 @@ const navItems = [
   {
     section: 'Overview',
     items: [
-      { href: '/dashboard',         label: 'Dashboard',   icon: LayoutDashboard },
-      { href: '/dashboard/reports', label: 'Reports',     icon: BarChart3 },
+      { href: '/dashboard',             label: 'Dashboard',   icon: LayoutDashboard },
+      { href: '/dashboard/reports',     label: 'Reports',     icon: BarChart3 },
+      { href: '/dashboard/reports/cdr', label: 'Call Logs',   icon: PhoneCall },
     ],
   },
   {

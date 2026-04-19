@@ -27,11 +27,19 @@ interface TrunkBody {
 export const GET = withUser(async (_req: NextRequest, _user: JwtPayload) => {
   try {
     const { ariGet } = await import('@/lib/asterisk/ari-client');
-    const all = await ariGet<Array<{ id: string; state: string }>>('/endpoints/PJSIP');
-    const trunks = all.filter((e) => e.id.startsWith('trunk-'));
+    const all = await ariGet<Array<{ technology: string; resource: string; state: string; channel_ids: string[] }>>('/endpoints/PJSIP');
+    // Trunks are identified by the 'trunk-' prefix on the resource name
+    const trunks = all
+      .filter((e) => (e.resource ?? '').startsWith('trunk-'))
+      .map((e) => ({ id: e.resource, state: e.state, channel_ids: e.channel_ids }));
     return NextResponse.json({ data: trunks });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 502 });
+    const msg = String(err);
+    // ARI returns 404 when no PJSIP endpoints exist at all
+    if (msg.includes('404') || msg.includes('No Endpoints found')) {
+      return NextResponse.json({ data: [] });
+    }
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 });
 

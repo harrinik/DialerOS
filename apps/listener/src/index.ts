@@ -7,6 +7,7 @@ import { AriEventRouter } from './ari/eventRouter.js';
 import { CallDecisionEngine } from './engines/callDecisionEngine.js';
 import { RealtimeGateway } from './gateway/realtimeGateway.js';
 import { AriClient } from './services/ariClient.js';
+import { AmiCdrListener } from './services/amiCdrListener.js';
 
 // ---- Validate required environment variables ----------------------------
 
@@ -34,10 +35,12 @@ redis.on('error', (err) => logger.error({ err }, 'Redis error (listener)'));
 // ---- Graceful shutdown ---------------------------------------------------
 
 let ariWs: AriWebSocket | null = null;
+let amiCdr: AmiCdrListener | null = null;
 
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Graceful shutdown initiated (listener)');
   ariWs?.destroy();
+  amiCdr?.destroy();
   await redis.quit();
   logger.info('Listener service shut down cleanly');
   process.exit(0);
@@ -102,6 +105,20 @@ async function main(): Promise<void> {
   });
 
   ariWs.connect();
+
+  // ── AMI CDR listener — tracks ALL calls (including internal extension calls)
+  const amiHost = process.env['AMI_HOST'] ?? process.env['ARI_HOST'] ?? 'localhost';
+  const amiPort = parseInt(process.env['AMI_PORT'] ?? '5038', 10);
+  const amiUser = process.env['AMI_USERNAME'] ?? process.env['AMI_USER'] ?? 'dialer';
+  const amiPass = process.env['AMI_PASSWORD'] ?? process.env['AMI_PASS'] ?? '';
+
+  if (amiPass) {
+    amiCdr = new AmiCdrListener({ host: amiHost, port: amiPort, user: amiUser, pass: amiPass }, gateway);
+    amiCdr.connect();
+    logger.info({ host: amiHost, port: amiPort }, 'AMI CDR listener started');
+  } else {
+    logger.warn('AMI_PASSWORD not set — AMI CDR listener disabled (internal calls will not be tracked)');
+  }
 
   // Signal handlers
   for (const signal of ['SIGTERM', 'SIGINT']) {
