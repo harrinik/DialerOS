@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Loader2, AlertCircle, Phone, Settings2, Clock } from 'lucide-react';
 
 const TIMEZONES = [
@@ -160,12 +159,13 @@ export default function NewCampaignPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="camp-desc">Description</Label>
-              <Textarea
+              <textarea
                 id="camp-desc"
                 value={form.description}
                 onChange={e => set('description', e.target.value)}
                 placeholder="Optional notes about this campaign..."
                 rows={2}
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
