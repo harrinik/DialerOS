@@ -18,7 +18,13 @@ interface Settings {
   soundsDir: string; recordingsDir: string;
   lastTestedAt?: string; lastTestOk?: boolean; lastTestError?: string;
 }
-type TestResult = { ok: boolean; results: { ari: { ok: boolean; version?: string; error?: string }; ami: { ok: boolean; ping?: string; error?: string } } };
+type AriResult = { ok: boolean; version?: string; error?: string };
+type AmiResult = { ok: boolean; ping?: string; error?: string };
+type TestResult = {
+  ok: boolean;
+  results?: { ari?: AriResult; ami?: AmiResult };
+  error?: string;  // present when API itself errors (e.g. 401, settings not saved)
+};
 
 const DEFAULT: Settings = { ariHost: 'localhost', ariPort: 8088, ariUser: 'dialer', ariPassword: '', ariSsl: false, ariApp: 'dialer', amiPort: 5038, soundsDir: '/var/lib/asterisk/sounds/dialer', recordingsDir: '/var/spool/asterisk/monitor' };
 
@@ -144,13 +150,27 @@ export default function AsteriskHubPage() {
       {testResult && (
         <Card className={cn('border', testResult.ok ? 'border-success/40 bg-success/5' : 'border-destructive/40 bg-destructive/5')}>
           <CardContent className="pt-4 space-y-2">
-            <p className="font-semibold text-sm">{testResult.ok ? '✅ All connections successful' : '⚠️ Some connections failed'}</p>
-            {testResult.results.ari.ok
-              ? <p className="text-xs text-success">ARI: Connected — Asterisk {testResult.results.ari.version}</p>
-              : <p className="text-xs text-destructive">ARI: {testResult.results.ari.error}</p>}
-            {testResult.results.ami.ok
-              ? <p className="text-xs text-success">AMI: Connected — Ping OK</p>
-              : <p className="text-xs text-destructive">AMI: {testResult.results.ami.error}</p>}
+            <p className="font-semibold text-sm">
+              {testResult.ok ? '✅ All connections successful' : '⚠️ Some connections failed'}
+            </p>
+            {/* Top-level error (e.g. settings not configured yet) */}
+            {testResult.error && (
+              <p className="text-xs text-destructive">{testResult.error}</p>
+            )}
+            {/* ARI result */}
+            {testResult.results?.ari?.ok === true && (
+              <p className="text-xs text-success">ARI: Connected — Asterisk {testResult.results.ari.version}</p>
+            )}
+            {testResult.results?.ari?.ok === false && (
+              <p className="text-xs text-destructive">ARI: {testResult.results.ari.error}</p>
+            )}
+            {/* AMI result */}
+            {testResult.results?.ami?.ok === true && (
+              <p className="text-xs text-success">AMI: Connected — Ping OK</p>
+            )}
+            {testResult.results?.ami?.ok === false && (
+              <p className="text-xs text-destructive">AMI: {testResult.results.ami.error}</p>
+            )}
           </CardContent>
         </Card>
       )}
