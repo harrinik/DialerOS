@@ -137,13 +137,24 @@ export default function AsteriskHubPage() {
 
   const test = async () => {
     setTesting(true); setTestResult(null);
+    // 30s abort so the button can never spin forever
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
     try {
-      const r = await fetch('/api/asterisk/test', { method: 'POST', headers: getHeaders() });
+      const r = await fetch('/api/asterisk/test', {
+        method: 'POST',
+        headers: getHeaders(),
+        signal: controller.signal,
+      });
       const d = await r.json() as TestResult;
       setTestResult(d);
     } catch (e) {
-      setTestResult({ ok: false, error: String(e) });
+      const msg = e instanceof DOMException && e.name === 'AbortError'
+        ? 'Test timed out after 30 seconds. The server may be unreachable.'
+        : String(e);
+      setTestResult({ ok: false, error: msg });
     } finally {
+      clearTimeout(timer);
       setTesting(false);
     }
   };
