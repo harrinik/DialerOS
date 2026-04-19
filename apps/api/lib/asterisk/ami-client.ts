@@ -84,17 +84,25 @@ class AmiClient extends EventEmitter {
 
   private handleData(data: string) {
     this.buffer += data;
-    // AMI packets are delimited by \r\n\r\n
+
+    // ── Banner detection ────────────────────────────────────────────────────
+    // The AMI banner is a SINGLE "\r\n"-terminated line, NOT a full packet.
+    // It MUST be detected before the “\r\n\r\n” packet split or it gets stuck
+    // in the buffer forever, causing a deadlock (client waits for _banner,
+    // banner never fires, connection times out).
+    if (!this.loggedIn && this.buffer.includes('Asterisk Call Manager')) {
+      // Strip the banner line from the buffer so it doesn't confuse packet parsing
+      this.buffer = this.buffer.replace(/Asterisk Call Manager\/[^\r\n]*\r?\n?/, '');
+      this.emit('_banner');
+      // Don’t return — there may be more data in the buffer already
+    }
+
+    // ── AMI packet parsing (“\r\n\r\n” delimited) ───────────────────────────
     const packets = this.buffer.split('\r\n\r\n');
     this.buffer = packets.pop() ?? '';
 
     for (const packet of packets) {
       if (!packet.trim()) continue;
-
-      if (packet.startsWith('Asterisk Call Manager')) {
-        this.emit('_banner');
-        continue;
-      }
 
       const obj: AmiResponse = {};
       const lines = packet.split('\r\n');
@@ -103,7 +111,6 @@ class AmiClient extends EventEmitter {
         if (idx < 0) continue;
         const key = line.slice(0, idx).trim();
         const val = line.slice(idx + 1).trim();
-        // Handle Output lines which have no key
         if (key === 'Output') {
           obj['Output'] = (obj['Output'] ? obj['Output'] + '\n' : '') + val;
         } else if (key) {
