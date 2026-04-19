@@ -61,10 +61,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading,     setLoading]     = useState(true);
 
   // Rehydrate from localStorage on mount
+  // Also migrates sessions saved under the old 'access_token' key (pre-rename)
   useEffect(() => {
     try {
-      const token = localStorage.getItem(TOKEN_KEY);
-      const raw   = localStorage.getItem(USER_KEY);
+      let token = localStorage.getItem(TOKEN_KEY);
+      let raw   = localStorage.getItem(USER_KEY);
+
+      // One-time migration: old key was 'access_token' (without 'dialer_' prefix)
+      if (!token) {
+        const legacyToken   = localStorage.getItem('access_token');
+        const legacyRefresh = localStorage.getItem('refresh_token');
+        const legacyUser    = localStorage.getItem('user');
+        if (legacyToken) {
+          // Migrate to new keys
+          localStorage.setItem(TOKEN_KEY,   legacyToken);
+          if (legacyRefresh) localStorage.setItem(REFRESH_KEY, legacyRefresh);
+          if (legacyUser)    localStorage.setItem(USER_KEY,    legacyUser);
+          // Remove old keys to avoid future confusion
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('user');
+          token = legacyToken;
+          raw   = legacyUser;
+        }
+      }
+
       if (token && raw) {
         setAccessToken(token);
         setUser(JSON.parse(raw) as AuthUser);

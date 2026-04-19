@@ -42,7 +42,7 @@ const DEFAULT: Settings = {
 };
 
 export default function AsteriskHubPage() {
-  const { accessToken } = useAuth();  // ← token from context, not localStorage
+  const { accessToken, loading: authLoading } = useAuth();  // wait for auth rehydration
   const [settings, setSettings] = useState<Settings>(DEFAULT);
   // Passwords are kept separate — never pre-filled from server (security)
   const [ariPassword, setAriPassword]   = useState('');
@@ -88,7 +88,13 @@ export default function AsteriskHubPage() {
     }
   }, [getHeaders]);
 
-  useEffect(() => { void loadSettings(); }, [loadSettings]);
+  // Only load settings after AuthContext has finished rehydrating from localStorage
+  // Prevents a 401 race where loadSettings fires before accessToken is populated
+  useEffect(() => {
+    if (!authLoading) {
+      void loadSettings();
+    }
+  }, [loadSettings, authLoading]);
 
   const save = async () => {
     setSaving(true); setSaved(false); setSaveError(null);
