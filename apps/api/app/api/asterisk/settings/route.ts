@@ -9,22 +9,44 @@ export const GET = withUser(async (_req: NextRequest, _user: JwtPayload) => {
   await connectDb();
   const s = await AsteriskSettings.findOne({}).lean();
   if (!s) return NextResponse.json({ data: null });
-  // Never return the raw password
-  const { ariPassword: _a, amiPassword: _b, ...safe } = s as Record<string, unknown>;
-  return NextResponse.json({ data: { ...safe, ariPassword: '••••••••', amiPassword: s.amiPassword ? '••••••••' : '' } });
+
+  // Never return raw passwords — return boolean flags indicating whether they're set.
+  // The UI uses these flags to show "unchanged — set" placeholder text.
+  const { ariPassword, amiPassword, ...safe } = s as Record<string, unknown>;
+  return NextResponse.json({
+    data: {
+      ...safe,
+      ariPasswordSet: !!ariPassword,
+      amiPasswordSet: !!amiPassword,
+    },
+  });
 });
 
 export const PUT = withUser(async (req: NextRequest, _user: JwtPayload) => {
   await connectDb();
   const body = await req.json() as Record<string, unknown>;
 
-  // Don't overwrite passwords if the placeholder was sent
+  // Only include password fields if they are non-empty strings (user explicitly changed them)
   const update: Record<string, unknown> = { ...body };
-  if (update.ariPassword === '••••••••') delete update.ariPassword;
-  if (update.amiPassword === '••••••••') delete update.amiPassword;
+  if (!update.ariPassword) delete update.ariPassword;
+  if (!update.amiPassword) delete update.amiPassword;
+  // Remove the boolean flag fields — they're read-only indicators, not stored columns
+  delete update.ariPasswordSet;
+  delete update.amiPasswordSet;
 
-  const s = await AsteriskSettings.findOneAndUpdate({}, update, { upsert: true, new: true, runValidators: true });
+  const s = await AsteriskSettings.findOneAndUpdate(
+    {},
+    { $set: update },
+    { upsert: true, new: true, runValidators: true },
+  );
   invalidateAriCache();
 
-  return NextResponse.json({ data: { ...s.toObject(), ariPassword: '••••••••', amiPassword: s.amiPassword ? '••••••••' : '' } });
+  const { ariPassword, amiPassword, ...safe } = s.toObject() as Record<string, unknown>;
+  return NextResponse.json({
+    data: {
+      ...safe,
+      ariPasswordSet: !!ariPassword,
+      amiPasswordSet: !!amiPassword,
+    },
+  });
 });
