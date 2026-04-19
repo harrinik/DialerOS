@@ -47,9 +47,9 @@ export const POST = withUser(async () => {
   // ── Persist test result ──────────────────────────────────────────────────
   s.lastTestedAt = new Date();
   s.lastTestOk   = allOk;
-  // Clear stale error when all pass; keep last error when something fails
+  // Clear stale error when all pass (empty string); keep last error when something fails
   s.lastTestError = allOk
-    ? undefined
+    ? ''
     : [
         !(results.ari as { ok: boolean }).ok ? `ARI: ${(results.ari as { error: string }).error}` : null,
         !(results.ami as { ok: boolean }).ok ? `AMI: ${(results.ami as { error: string }).error}` : null,
