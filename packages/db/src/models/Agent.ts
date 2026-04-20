@@ -3,7 +3,7 @@ import mongoose, { type Document, type Model } from 'mongoose';
 export interface IAgent extends Document {
   name: string;
   sipEndpoint: string;
-  status: 'available' | 'busy' | 'offline' | 'paused';
+  status: 'available' | 'busy' | 'offline' | 'paused' | 'wrapup' | 'training';
   campaignIds: mongoose.Types.ObjectId[];
   maxConcurrentCalls: number;
   currentCallId?: mongoose.Types.ObjectId;
@@ -20,7 +20,7 @@ const AgentSchema = new mongoose.Schema<IAgent>(
   {
     name:               { type: String, required: true, trim: true },
     sipEndpoint:        { type: String, required: true },
-    status:             { type: String, enum: ['available', 'busy', 'offline', 'paused'], default: 'offline', index: true },
+    status:             { type: String, enum: ['available', 'busy', 'offline', 'paused', 'wrapup', 'training'], default: 'offline', index: true },
     campaignIds:        [{ type: mongoose.Schema.Types.ObjectId, ref: 'Campaign' }],
     maxConcurrentCalls: { type: Number, default: 1, min: 1, max: 10 },
     currentCallId:      { type: mongoose.Schema.Types.ObjectId, ref: 'CallLog' },
