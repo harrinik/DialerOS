@@ -59,8 +59,8 @@ async function preparePastedContacts(numbersText?: string): Promise<PreparedCont
     }
     return [{
       phone,
-      firstName: '',
-      lastName: '',
+      firstName: 'Imported',
+      lastName: 'Contact',
       status: 'pending' as const,
       customFields: {},
     }];

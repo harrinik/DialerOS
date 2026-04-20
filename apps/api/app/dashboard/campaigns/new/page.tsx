@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { parsePastedPhoneInput } from '@dialer/shared';
@@ -22,6 +22,11 @@ const TIMEZONES = [
 ];
 
 type CreationMode = 'campaign' | 'single';
+
+interface TrunkOption {
+  id: string;
+  state: string;
+}
 
 interface FormState {
   name: string;
@@ -64,6 +69,9 @@ export default function NewCampaignPage() {
   const [singleNumber, setSingleNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [trunks, setTrunks] = useState<TrunkOption[]>([]);
+  const [trunksLoading, setTrunksLoading] = useState(true);
+  const [trunksError, setTrunksError] = useState<string | null>(null);
 
   const set = <K extends keyof FormState>(key: K, val: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: val }));
@@ -75,6 +83,55 @@ export default function NewCampaignPage() {
 
   const audienceInput = creationMode === 'single' ? singleNumber : pastedNumbers;
   const audiencePreview = parsePastedPhoneInput(audienceInput);
+  const activeTrunks = trunks.filter((trunk) => trunk.state === 'online');
+
+  useEffect(() => {
+    if (!accessToken) return;
+
+    let cancelled = false;
+    setTrunksLoading(true);
+    setTrunksError(null);
+
+    fetch('/api/asterisk/trunks', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    })
+      .then(async (response) => {
+        const body = await response.json() as { data?: TrunkOption[]; error?: string };
+        if (!response.ok) {
+          throw new Error(body.error ?? 'Failed to load SIP trunks.');
+        }
+        if (cancelled) return;
+        setTrunks(body.data ?? []);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setTrunks([]);
+        setTrunksError(String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setTrunksLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
+
+  useEffect(() => {
+    setForm((prev) => {
+      if (prev.sipTrunk && !activeTrunks.some((trunk) => trunk.id === prev.sipTrunk)) {
+        return { ...prev, sipTrunk: '' };
+      }
+      const firstActiveTrunk = activeTrunks[0]?.id;
+      if (!prev.sipTrunk && firstActiveTrunk) {
+        return { ...prev, sipTrunk: firstActiveTrunk };
+      }
+      return prev;
+    });
+  }, [activeTrunks]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,19 +299,36 @@ export default function NewCampaignPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="camp-trunk">SIP Trunk <span className="text-destructive">*</span></Label>
-              <Input
-                id="camp-trunk"
+              <Select
                 value={form.sipTrunk}
-                onChange={(e) => set('sipTrunk', e.target.value)}
-                placeholder="trunk-main (name from Asterisk -> SIP Trunks)"
-                required
-              />
+                onValueChange={(value) => set('sipTrunk', value)}
+                disabled={trunksLoading || activeTrunks.length === 0}
+              >
+                <SelectTrigger id="camp-trunk">
+                  <SelectValue placeholder={trunksLoading ? 'Loading active SIP trunks...' : 'Select an active SIP trunk'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeTrunks.map((trunk) => (
+                    <SelectItem key={trunk.id} value={trunk.id}>
+                      {trunk.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-xs text-muted-foreground">
                 Must match the trunk name configured in{' '}
                 <Link href="/dashboard/asterisk/trunks" className="underline">
                   Asterisk -&gt; SIP Trunks
                 </Link>.
               </p>
+              {trunksError && (
+                <p className="text-xs text-destructive">{trunksError}</p>
+              )}
+              {!trunksLoading && activeTrunks.length === 0 && !trunksError && (
+                <p className="text-xs text-warning">
+                  No active SIP trunks are available right now. Bring a trunk online before starting a campaign.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -454,7 +528,7 @@ export default function NewCampaignPage() {
         </Card>
 
         <div className="flex gap-3">
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || trunksLoading || activeTrunks.length === 0}>
             {saving ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
