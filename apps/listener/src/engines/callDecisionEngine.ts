@@ -532,7 +532,7 @@ export class CallDecisionEngine {
       'ivr_start',
       'info',
       'IVR flow started',
-      `Entering IVR flow ${flow._id} at step ${entryStep.id}.`,
+      `Entering IVR flow ${ctx.ivrFlowId ?? 'unknown'} at step ${entryStep.id}.`,
     );
     await this.executeIvrStep(channelId, ctx, flow, entryStep);
   }
@@ -551,7 +551,7 @@ export class CallDecisionEngine {
       `ivr_${step.type}`,
       'info',
       `IVR step: ${step.type}`,
-      step.label ? `Step ${step.id} (${step.label}).` : `Step ${step.id}.`,
+      `Step ${step.id}.`,
     );
 
     switch (step.type) {
