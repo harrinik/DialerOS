@@ -12,7 +12,9 @@ import { Plus, CheckCircle2, Phone, PowerOff, Users, QrCode } from 'lucide-react
 
 interface Agent {
   _id: string; name: string; extension: string; sipEndpoint: string;
-  status: 'available' | 'busy' | 'offline' | 'break';
+  status: 'available' | 'busy' | 'offline' | 'paused' | 'wrapup' | 'training';
+  skills: string[];
+  priority: number;
   maxConcurrentCalls: number; updatedAt: string;
 }
 
@@ -27,14 +29,16 @@ const STATUS_STYLE: Record<string, { dot: string; text: string }> = {
   available: { dot: 'bg-success', text: 'text-success' },
   busy:      { dot: 'bg-primary', text: 'text-primary' },
   offline:   { dot: 'bg-muted-foreground', text: 'text-muted-foreground' },
-  break:     { dot: 'bg-warning', text: 'text-warning' },
+  paused:    { dot: 'bg-warning', text: 'text-warning' },
+  wrapup:    { dot: 'bg-warning', text: 'text-warning' },
+  training:  { dot: 'bg-secondary', text: 'text-secondary' },
 };
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', extension: '', maxConcurrentCalls: 1, password: '' });
+  const [form, setForm] = useState({ name: '', email: '', extension: '', maxConcurrentCalls: 1, password: '', skills: '', priority: 0, wrapupTimeSeconds: 30 });
   const [saving, setSaving] = useState(false);
   const [credentials, setCredentials] = useState<AgentCredentials | null>(null);
   const [qrImage, setQrImage] = useState<string | null>(null);
@@ -55,16 +59,20 @@ export default function AgentsPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     try {
+      const payload = {
+        ...form,
+        skills: form.skills ? form.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+      };
       const res = await fetch('/api/agents', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json() as { error?: string; credentials?: AgentCredentials };
       if (!res.ok) throw new Error(data.error ?? 'Failed to create agent');
       if (data.credentials) setCredentials(data.credentials);
       setShowForm(false);
-      setForm({ name: '', email: '', extension: '', maxConcurrentCalls: 1, password: '' });
+      setForm({ name: '', email: '', extension: '', maxConcurrentCalls: 1, password: '', skills: '', priority: 0, wrapupTimeSeconds: 30 });
       fetchAgents();
     } catch (err) {
       alert((err as Error).message);
@@ -153,8 +161,16 @@ export default function AgentsPage() {
                 <Input type="number" min={1} max={10} value={form.maxConcurrentCalls} onChange={(e) => setForm({ ...form, maxConcurrentCalls: Number(e.target.value) })} />
               </div>
               <div className="space-y-1.5">
-                <Label>Agent Login Password (optional)</Label>
-                <Input type="text" placeholder="Auto-generate if empty" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+                <Label>Skills (comma-separated)</Label>
+                <Input placeholder="sales,support,billing" value={form.skills ?? ''} onChange={(e) => setForm({ ...form, skills: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Priority (0-100)</Label>
+                <Input type="number" min={0} max={100} value={form.priority ?? 0} onChange={(e) => setForm({ ...form, priority: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Wrap-up Time (seconds)</Label>
+                <Input type="number" min={0} max={300} value={form.wrapupTimeSeconds ?? 30} onChange={(e) => setForm({ ...form, wrapupTimeSeconds: Number(e.target.value) })} />
               </div>
               <div className="col-span-2 flex gap-2">
                 <Button type="submit" disabled={saving}>{saving ? 'Creating...' : 'Create Agent'}</Button>
@@ -180,7 +196,7 @@ export default function AgentsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead><TableHead>Extension</TableHead><TableHead>SIP Endpoint</TableHead>
-                  <TableHead>Status</TableHead><TableHead>Max Calls</TableHead><TableHead>Updated</TableHead><TableHead>Actions</TableHead>
+                  <TableHead>Status</TableHead><TableHead>Skills</TableHead><TableHead>Priority</TableHead><TableHead>Max Calls</TableHead><TableHead>Updated</TableHead><TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -197,6 +213,8 @@ export default function AgentsPage() {
                           <span className={`text-xs capitalize ${s.text}`}>{a.status}</span>
                         </div>
                       </TableCell>
+                      <TableCell className="text-xs">{(a.skills ?? []).join(', ') || '-'}</TableCell>
+                      <TableCell className="font-mono text-xs">{a.priority ?? 0}</TableCell>
                       <TableCell className="font-mono text-xs">{a.maxConcurrentCalls}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{new Date(a.updatedAt).toLocaleString()}</TableCell>
                       <TableCell>

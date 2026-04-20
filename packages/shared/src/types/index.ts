@@ -41,7 +41,7 @@ export type CallDisposition =
 
 export type AmdResult = 'HUMAN' | 'MACHINE' | 'NOTSURE' | 'HANGUP';
 
-export type AgentStatus = 'available' | 'busy' | 'offline' | 'break';
+export type AgentStatus = 'available' | 'busy' | 'offline' | 'paused' | 'wrapup' | 'training';
 
 export type IvrStepType =
   | 'start'
@@ -113,6 +113,7 @@ export interface Campaign {
   startTime?: string; // HH:MM
   endTime?: string;   // HH:MM
   blackoutDates: string[]; // YYYY-MM-DD in campaign timezone
+  holidayCalendarId?: string;
   stats: CampaignStats;
   callerIdName: string;
   callerIdNumber: string;
@@ -345,4 +346,18 @@ export interface RealtimeAgentEvent {
   agentId: string;
   campaignId?: string;
   timestamp: string;
+}
+
+export interface HolidayCalendar {
+  _id: string;
+  name: string;
+  timezone: string;
+  dates: Array<{
+    date: string; // YYYY-MM-DD
+    label: string;
+  }>;
+  ownerId: string;
+  isDefault: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }

@@ -25,7 +25,7 @@ import {
   REDIS_KEYS,
   type DialJobPayload,
 } from '@dialer/shared';
-import { CallLog, Contact, Campaign, Agent } from '@dialer/db';
+import { CallLog, Contact, Campaign, Agent, HolidayCalendar } from '@dialer/db';
 import { AriClient } from '../services/ariClient.js';
 import { DncService } from '../services/dncService.js';
 import { ConcurrencyManager } from '../services/concurrencyManager.js';
@@ -225,6 +225,7 @@ export function createDialerWorker(redis: Redis): Worker {
           startTime: 1,
           endTime: 1,
           blackoutDates: 1,
+          holidayCalendarId: 1,
           dialMode: 1,
           ratePerSecond: 1,
           agentPool: 1,
@@ -252,7 +253,18 @@ export function createDialerWorker(redis: Redis): Worker {
 
         // 1c. Holiday / blackout date guard
         const todayInCampaignTz = getCurrentDateInTimezone(campaign.timezone ?? 'UTC');
-        if ((campaign.blackoutDates ?? []).includes(todayInCampaignTz)) {
+        const allBlackoutDates = [...(campaign.blackoutDates ?? [])];
+
+        // If campaign has a linked holiday calendar, fetch those dates too
+        if (campaign.holidayCalendarId) {
+          const holidayCal = await HolidayCalendar.findById(campaign.holidayCalendarId).lean();
+          if (holidayCal?.dates) {
+            const holidayDates = holidayCal.dates.map((d) => d.date);
+            allBlackoutDates.push(...holidayDates);
+          }
+        }
+
+        if (allBlackoutDates.includes(todayInCampaignTz)) {
           const tomorrowDelayMs = 24 * 60 * 60 * 1000;
           jobLog.info({ todayInCampaignTz }, 'Blackout date active — delaying job to next day');
           await job.moveToDelayed(Date.now() + tomorrowDelayMs, job.token);

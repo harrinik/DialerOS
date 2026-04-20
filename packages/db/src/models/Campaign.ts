@@ -19,6 +19,7 @@ export interface ICampaign extends Document {
   startTime?: string;
   endTime?: string;
   blackoutDates: string[];
+  holidayCalendarId?: mongoose.Types.ObjectId;
   callerIdName: string;
   callerIdNumber: string;
   sipTrunk: string;
@@ -74,6 +75,7 @@ const CampaignSchema = new mongoose.Schema<ICampaign>(
     startTime:  { type: String, match: /^([01]\d|2[0-3]):([0-5]\d)$/ },
     endTime:    { type: String, match: /^([01]\d|2[0-3]):([0-5]\d)$/ },
     blackoutDates: [{ type: String, match: /^\d{4}-\d{2}-\d{2}$/ }],
+    holidayCalendarId: { type: mongoose.Schema.Types.ObjectId, ref: 'HolidayCalendar' },
     callerIdName:   { type: String, required: true, maxlength: 100 },
     callerIdNumber: { type: String, required: true, match: /^\+?[1-9]\d{1,14}$/ },
     sipTrunk:   { type: String, required: true },

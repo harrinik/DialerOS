@@ -9,3 +9,4 @@ export { Campaign, type ICampaign } from './models/Campaign.js';
 export { Agent, type IAgent } from './models/Agent.js';
 export { IvrFlowModel, type IIvrFlow, type IvrFlow, type IvrStep, type IvrBranch } from './models/IvrFlow.js';
 export { DncList, type IDncList } from './models/DncList.js';
+export { HolidayCalendar, type IHolidayCalendar } from './models/HolidayCalendar.js';

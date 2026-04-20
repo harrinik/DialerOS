@@ -92,6 +92,9 @@ export const POST = withAuth(async (req: NextRequest, user: JwtPayload) => {
       status: 'offline',
       campaignIds: Array.isArray(body['campaignIds']) ? body['campaignIds'] : [],
       maxConcurrentCalls: Number.isFinite(maxConcurrentCalls) ? maxConcurrentCalls : 1,
+      skills: Array.isArray(body['skills']) ? body['skills'] : [],
+      priority: Number(body['priority'] ?? 0),
+      wrapupTimeSeconds: Number(body['wrapupTimeSeconds'] ?? 30),
     });
 
     await AuditLog.create({

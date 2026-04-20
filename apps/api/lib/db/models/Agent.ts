@@ -9,6 +9,9 @@ export interface IAgent extends Document {
   currentCallId?: mongoose.Types.ObjectId;
   campaignIds: mongoose.Types.ObjectId[];
   maxConcurrentCalls: number;
+  skills: string[];
+  priority: number;
+  wrapupTimeSeconds: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,7 +29,7 @@ const AgentSchema = new mongoose.Schema<IAgent>(
     sipEndpoint: { type: String, required: true, trim: true },
     status: {
       type: String,
-      enum: ['available', 'busy', 'offline', 'break'],
+      enum: ['available', 'busy', 'offline', 'paused', 'wrapup', 'training'],
       default: 'offline',
       index: true,
     },
@@ -35,6 +38,9 @@ const AgentSchema = new mongoose.Schema<IAgent>(
       { type: mongoose.Schema.Types.ObjectId, ref: 'Campaign' },
     ],
     maxConcurrentCalls: { type: Number, default: 1, min: 1, max: 10 },
+    skills: [{ type: String, trim: true }],
+    priority: { type: Number, default: 0, min: 0, max: 100 },
+    wrapupTimeSeconds: { type: Number, default: 30, min: 0, max: 300 },
   },
   {
     timestamps: true,

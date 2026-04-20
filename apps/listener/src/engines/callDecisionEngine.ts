@@ -304,6 +304,27 @@ export class CallDecisionEngine {
     await this.deleteChannelContext(channelId);
 
     this.emitCallEvent({ type: 'call:ended', callLogId: ctx.callLogId, contactId: ctx.contactId, campaignId: ctx.campaignId, channelId, disposition, duration });
+
+    // Transition agent to wrapup state (if one was routed)
+    if (callLog?.routedToAgentId) {
+      const agent = await Agent.findById(callLog.routedToAgentId).lean();
+      if (agent) {
+        const wrapupTimeSec = (agent as unknown as { wrapupTimeSeconds?: number }).wrapupTimeSeconds ?? 30;
+        // Set agent to wrapup state immediately
+        await Agent.updateOne({ _id: callLog.routedToAgentId }, { $set: { status: 'wrapup', currentCallId: undefined } });
+        this.gateway.emitAgentEvent({ type: 'agent:busy', agentId: String(callLog.routedToAgentId), campaignId: ctx.campaignId, timestamp: new Date().toISOString() });
+
+        // Schedule transition to available after wrapup time
+        setTimeout(async () => {
+          const refreshed = await Agent.findById(callLog.routedToAgentId).lean();
+          if (refreshed && refreshed.status === 'wrapup') {
+            await Agent.updateOne({ _id: callLog.routedToAgentId }, { $set: { status: 'available' } });
+            this.gateway.emitAgentEvent({ type: 'agent:available', agentId: String(callLog.routedToAgentId), campaignId: ctx.campaignId, timestamp: new Date().toISOString() });
+          }
+        }, wrapupTimeSec * 1000);
+      }
+    }
+
     await this.emitCampaignStats(ctx.campaignId);
   }
 
@@ -498,15 +519,34 @@ export class CallDecisionEngine {
 
   // ---- Agent Routing -----------------------------------------------------
 
-  private async routeToAgent(channelId: string, ctx: ChannelContext, preferredAgentPool: string[] = []): Promise<void> {
-    const poolQuery = preferredAgentPool.length > 0
-      ? { _id: { $in: preferredAgentPool }, status: 'available' }
-      : { campaignIds: ctx.campaignId, status: 'available' };
+  private async routeToAgent(
+    channelId: string,
+    ctx: ChannelContext,
+    preferredAgentPool: string[] = [],
+    requiredSkill?: string,
+  ): Promise<void> {
+    // Build query: filter by pool + status, sort by priority (desc) then oldest available (by updatedAt)
+    const andConditions: Record<string, unknown>[] = [
+      { status: 'available' },
+    ];
+
+    if (preferredAgentPool.length > 0) {
+      andConditions.push({ _id: { $in: preferredAgentPool } });
+    } else {
+      andConditions.push({ campaignIds: ctx.campaignId });
+    }
+
+    // If caller has a required skill, filter agents by that skill
+    if (requiredSkill) {
+      andConditions.push({ skills: requiredSkill });
+    }
+
+    const poolQuery = { $and: andConditions };
 
     const agent = await Agent.findOneAndUpdate(
       poolQuery,
       { $set: { status: 'busy', currentCallId: ctx.callLogId } },
-      { new: true, sort: { updatedAt: 1 } },
+      { new: true, sort: { priority: -1, updatedAt: 1 } },
     ).lean();
 
     if (!agent) {
