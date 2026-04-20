@@ -37,7 +37,7 @@ function ariGet<T = unknown>(path: string): Promise<T> {
 }
 
 function ariPost<T = unknown>(path: string, body?: unknown): Promise<T | null> {
-  return ariRequest('POST', path, body).then((r) => (r.status === 204 ? null : (r.json() as Promise<T>));
+  return ariRequest('POST', path, body).then((r) => (r.status === 204 ? null : (r.json() as Promise<T>)));
 }
 
 function ariDelete(path: string): Promise<void> {

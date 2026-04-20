@@ -25,7 +25,7 @@ const DncListSchema = new mongoose.Schema<IDncList>(
   { collection: 'dnc_list' },
 );
 
-DncListSchema.pre('save', function (next) {
+DncListSchema.pre('save', function (this: any, next: any) {
   if (this.isModified('phone') || this.isNew) {
     this.phoneHash = createHash('sha256').update(this.phone.trim()).digest('hex');
   }

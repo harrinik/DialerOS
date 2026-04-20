@@ -57,7 +57,7 @@ interface PjsipEndpoint {
   allow: string;
   callerid: string;
   mailboxes: string;
-  named-physical-endpoint: string;
+  'named-physical-endpoint': string;
   device: string;
 }
 
@@ -91,13 +91,13 @@ interface PjsipTransport {
 // GET /api/asterisk/pjsip - list all PJSIP configuration
 export const GET = withAuth(async (_req: NextRequest, _user: JwtPayload) => {
   try {
-    const [endpoints, auths, aors, identifies, transports] = await Promise.all[
+    const [endpoints, auths, aors, identifies, transports] = await Promise.all([
       ariGet<PjsipEndpoint[]>('/endpoint'),
       ariGet<PjsipAuth[]>('/auth'),
       ariGet<PjsipAor[]>('/aor'),
       ariGet<PjsipIdentify[]>('/identify'),
       ariGet<PjsipTransport[]>('/transport'),
-    ];
+    ]);
 
     return NextResponse.json({
       data: {
