@@ -10,6 +10,14 @@ interface DtmfEntry {
   receivedAt: Date;
 }
 
+interface CallTraceEntry {
+  at: Date;
+  step: string;
+  level: 'info' | 'success' | 'warning' | 'error';
+  title: string;
+  detail?: string;
+}
+
 export interface ICallLog extends Document {
   contactId: mongoose.Types.ObjectId;
   campaignId: mongoose.Types.ObjectId;
@@ -29,8 +37,26 @@ export interface ICallLog extends Document {
   retryable: boolean;
   attempt: number;
   notes?: string;
+  failureStage?: string;
+  failureReason?: string;
+  trace: CallTraceEntry[];
   createdAt: Date;
 }
+
+const CallTraceEntrySchema = new mongoose.Schema<CallTraceEntry>(
+  {
+    at: { type: Date, default: Date.now },
+    step: { type: String, required: true },
+    level: {
+      type: String,
+      enum: ['info', 'success', 'warning', 'error'],
+      default: 'info',
+    },
+    title: { type: String, required: true },
+    detail: String,
+  },
+  { _id: false },
+);
 
 const CallLogSchema = new mongoose.Schema<ICallLog>(
   {
@@ -57,6 +83,9 @@ const CallLogSchema = new mongoose.Schema<ICallLog>(
     retryable:        { type: Boolean, default: false },
     attempt:          { type: Number, default: 1 },
     notes:            String,
+    failureStage:     String,
+    failureReason:    String,
+    trace:            { type: [CallTraceEntrySchema], default: [] },
   },
   { timestamps: { createdAt: 'createdAt', updatedAt: false }, collection: 'call_logs' },
 );

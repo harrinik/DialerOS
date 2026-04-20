@@ -32,6 +32,61 @@ import { ConcurrencyManager } from '../services/concurrencyManager.js';
 import { ErlangCPacingService } from '../services/pacingService.js';
 import { logger } from '../lib/logger.js';
 
+type TraceLevel = 'info' | 'success' | 'warning' | 'error';
+
+async function appendCallTrace(
+  callLogId: string,
+  step: string,
+  level: TraceLevel,
+  title: string,
+  detail?: string,
+): Promise<void> {
+  await CallLog.updateOne(
+    { _id: callLogId },
+    {
+      $push: {
+        trace: {
+          at: new Date(),
+          step,
+          level,
+          title,
+          ...(detail ? { detail } : {}),
+        },
+      },
+    },
+  );
+}
+
+async function markCallFailure(
+  callLogId: string,
+  stage: string,
+  reason: string,
+  detail?: string,
+): Promise<void> {
+  await CallLog.updateOne(
+    { _id: callLogId },
+    {
+      $set: {
+        disposition: 'failed',
+        endTime: new Date(),
+        retryable: true,
+        notes: reason,
+        failureStage: stage,
+        failureReason: reason,
+      },
+      $push: {
+        trace: {
+          at: new Date(),
+          step: stage,
+          level: 'error',
+          title: 'Call failed',
+          detail: detail ?? reason,
+        },
+      },
+    },
+  );
+}
+
 /** Atomically clamp stats.active at 0 — prevents negative values (ISSUE-25) */
 async function decrementActiveClamp(campaignId: string): Promise<void> {
   await Campaign.updateOne(
@@ -365,6 +420,13 @@ export function createDialerWorker(redis: Redis): Worker {
             disposition: 'no_answer',
             attempt,
             retryable: true,
+            trace: [{
+              at: new Date(),
+              step: 'preflight',
+              level: 'success',
+              title: 'Pre-flight checks passed',
+              detail: `Attempt ${attempt} is ready to dial ${phone} through ${sipTrunk}.`,
+            }],
           });
         } catch (err: unknown) {
           // ISSUE-13: handle duplicate channelId (should never happen with UUID but be safe)
@@ -378,6 +440,13 @@ export function createDialerWorker(redis: Redis): Worker {
 
         await Contact.updateOne({ _id: contactId }, { $set: { status: 'dialing' }, $push: { callLogs: callLog._id } });
         await Campaign.updateOne({ _id: campaignId }, { $inc: { 'stats.active': 1, 'stats.dialed': 1 } });
+        await appendCallTrace(
+          String(callLog._id),
+          'asterisk_originate_request',
+          'info',
+          'Dial request sent to Asterisk',
+          `Submitting originate request for endpoint ${sipTrunk}/${phone}.`,
+        );
 
         // 5. Originate call
         try {
@@ -406,15 +475,28 @@ export function createDialerWorker(redis: Redis): Worker {
           );
 
           await pacing.recordDialAttempt(campaignId, false);
+          await appendCallTrace(
+            String(callLog._id),
+            'asterisk_originate_accepted',
+            'success',
+            'Asterisk accepted the dial request',
+            `ARI accepted the originate request for ${sipTrunk}/${phone}. Waiting for channel events.`,
+          );
           jobLog.info({ channelId }, 'Call originated successfully');
         } catch (err) {
           // Originate failed — release slot immediately
           await concurrency.release(campaignId);
           await decrementActiveClamp(campaignId);
-          await CallLog.updateOne({ _id: callLog._id }, { $set: { disposition: 'failed', endTime: new Date(), retryable: true } });
+          const reason = err instanceof Error ? err.message : String(err);
+          await markCallFailure(
+            String(callLog._id),
+            'asterisk_originate',
+            reason,
+            `Asterisk rejected the originate request before the call entered Stasis. Endpoint: ${sipTrunk}/${phone}.`,
+          );
           await Contact.updateOne({ _id: contactId }, { $set: { status: 'failed' } });
           jobLog.error({ err }, 'ARI originate failed');
-          throw new Error(`Originate failed: ${String(err)}`);
+          throw new Error(`Originate failed: ${reason}`);
         }
       } finally {
         if (inflightAcquired) {

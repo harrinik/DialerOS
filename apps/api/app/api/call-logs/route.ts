@@ -26,9 +26,32 @@ export const GET = withAuth(async (req: NextRequest, user: JwtPayload) => {
   const skip  = (page - 1) * limit;
 
   const [data, total] = await Promise.all([
-    CallLog.find(filter).sort({ startTime: -1 }).skip(skip).limit(limit).lean(),
+    CallLog.find(filter)
+      .sort({ startTime: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('contactId', 'phone firstName lastName')
+      .populate('routedToAgentId', 'name extension')
+      .lean(),
     CallLog.countDocuments(filter),
   ]);
 
-  return NextResponse.json({ data, total, page, limit });
+  const normalized = data.map((entry) => {
+    const contact = entry.contactId as { phone?: string; firstName?: string; lastName?: string } | undefined;
+    const agent = entry.routedToAgentId as { name?: string; extension?: string } | undefined;
+
+    return {
+      ...entry,
+      phone: contact?.phone ?? '',
+      contactName: [contact?.firstName, contact?.lastName].filter(Boolean).join(' '),
+      routedAgent: agent
+        ? {
+            name: agent.name ?? '',
+            extension: agent.extension ?? '',
+          }
+        : null,
+    };
+  });
+
+  return NextResponse.json({ data: normalized, total, page, limit });
 });

@@ -32,6 +32,21 @@ interface AriBridge {
   channels: string[];
 }
 
+function formatAxiosErrorDetail(err: AxiosError): string {
+  const status = err.response?.status;
+  const responseData = err.response?.data;
+  const responseText =
+    responseData == null
+      ? ''
+      : typeof responseData === 'string'
+        ? responseData
+        : JSON.stringify(responseData);
+  const parts = [err.message];
+  if (status) parts.push(`HTTP ${status}`);
+  if (responseText) parts.push(responseText.slice(0, 300));
+  return parts.join(' | ');
+}
+
 export class AriClient {
   private readonly http: AxiosInstance;
   private readonly appName: string;
@@ -87,6 +102,7 @@ export class AriClient {
       return data;
     } catch (err) {
       const axiosErr = err as AxiosError;
+      const detail = formatAxiosErrorDetail(axiosErr);
       logger.error(
         {
           endpoint: params.endpoint,
@@ -96,7 +112,7 @@ export class AriClient {
         'ARI originate failed',
       );
       throw new Error(
-        `ARI originate failed for ${params.endpoint}: ${axiosErr.message}`,
+        `ARI originate failed for ${params.endpoint}: ${detail}`,
       );
     }
   }

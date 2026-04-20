@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Phone, CheckCircle2, Play, Pause, ArrowLeft, Calendar } from 'lucide-react';
+import { Phone, CheckCircle2, Play, Pause, ArrowLeft, Calendar, ChevronDown, ChevronRight, AlertCircle, CircleDot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,8 +22,28 @@ interface Campaign {
   ivrFlowId?: { _id: string; name: string; isDeployed: boolean };
   createdAt: string; updatedAt: string;
 }
+
+interface CallTraceEntry {
+  at: string;
+  step: string;
+  level: 'info' | 'success' | 'warning' | 'error';
+  title: string;
+  detail?: string;
+}
+
 interface CallLog {
-  _id: string; phone: string; disposition: string; duration?: number; amdResult?: string; startTime: string;
+  _id: string;
+  phone: string;
+  contactName?: string;
+  disposition: string;
+  duration?: number;
+  amdResult?: string;
+  startTime: string;
+  failureStage?: string;
+  failureReason?: string;
+  notes?: string;
+  trace?: CallTraceEntry[];
+  routedAgent?: { name: string; extension: string } | null;
 }
 
 const STATUS_BADGE: Record<string, BadgeProps['variant']> = {
@@ -38,6 +58,46 @@ const OUTCOME_BARS = [
   { key: 'failed',   label: 'Failed',   class: 'bg-destructive' },
 ] as const;
 
+const TRACE_LEVEL_STYLES: Record<CallTraceEntry['level'], string> = {
+  info: 'text-primary',
+  success: 'text-success',
+  warning: 'text-warning',
+  error: 'text-destructive',
+};
+
+function getDispositionTone(disposition: string): string {
+  if (disposition === 'answered') return 'text-success';
+  if (disposition === 'failed' || disposition === 'cancelled') return 'text-destructive';
+  if (disposition === 'machine' || disposition === 'busy') return 'text-warning';
+  return 'text-muted-foreground';
+}
+
+function summarizeCall(call: CallLog): string {
+  if (call.failureReason) return call.failureReason;
+  switch (call.disposition) {
+    case 'answered':
+      return call.routedAgent?.name
+        ? `Answered and routed to ${call.routedAgent.name}.`
+        : 'Answered successfully.';
+    case 'machine':
+      return call.amdResult
+        ? `Machine detection result: ${call.amdResult}.`
+        : 'A machine or voicemail answered the call.';
+    case 'busy':
+      return 'The destination reported busy.';
+    case 'no_answer':
+      return 'The destination never answered before the call ended.';
+    case 'failed':
+      return call.notes ?? 'The call failed before a stable conversation was established.';
+    default:
+      return call.notes ?? `Call ended with disposition ${call.disposition.replace(/_/g, ' ')}.`;
+  }
+}
+
+function getLastErrorTrace(call: CallLog): CallTraceEntry | undefined {
+  return [...(call.trace ?? [])].reverse().find((entry) => entry.level === 'error');
+}
+
 export default function CampaignDetailPage() {
   const id = (useParams()['id'] as string);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -47,6 +107,7 @@ export default function CampaignDetailPage() {
   const [blackoutInput, setBlackoutInput] = useState('');
   const [savingCalendar, setSavingCalendar] = useState(false);
   const [calendarForm, setCalendarForm] = useState({ timezone: 'UTC', startTime: '', endTime: '' });
+  const [expandedCalls, setExpandedCalls] = useState<Record<string, boolean>>({});
 
   const token = () => localStorage.getItem('dialer_access_token') ?? '';
 
@@ -67,7 +128,16 @@ export default function CampaignDetailPage() {
       fetchCampaign(),
       fetch(`/api/call-logs?campaignId=${id}&limit=20`, { headers: { Authorization: `Bearer ${token()}` } })
         .then((r) => r.json() as Promise<{ data: CallLog[] }>)
-        .then((d) => setRecentCalls(d.data ?? [])),
+        .then((d) => {
+          const calls = d.data ?? [];
+          setRecentCalls(calls);
+          setExpandedCalls((prev) => ({
+            ...Object.fromEntries(calls
+              .filter((call) => prev[call._id] || call.disposition === 'failed' || Boolean(call.failureReason))
+              .map((call) => [call._id, true])),
+            ...prev,
+          }));
+        }),
     ]).finally(() => setLoading(false));
   }, [id]);
 
@@ -266,11 +336,111 @@ export default function CampaignDetailPage() {
       <Card>
         <CardHeader><CardTitle className="text-base">Recent Calls</CardTitle></CardHeader>
         <Separator />
-        <CardContent className="pt-0 px-0">
+        <CardContent className="px-0 pt-0">
           {recentCalls.length === 0 ? (
             <p className="text-center text-muted-foreground py-10 text-sm">No calls recorded yet</p>
           ) : (
-            <Table className="min-w-190">
+            <div className="divide-y divide-border/60">
+              {recentCalls.map((c) => {
+                const expanded = expandedCalls[c._id] ?? false;
+                const lastError = getLastErrorTrace(c);
+                const summary = summarizeCall(c);
+
+                return (
+                  <div key={c._id} className="px-4 py-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-mono text-sm text-foreground">{c.phone || 'Unknown number'}</p>
+                          <Badge variant="outline" className={cn('capitalize', getDispositionTone(c.disposition))}>
+                            {c.disposition.replace(/_/g, ' ')}
+                          </Badge>
+                          {c.failureStage && (
+                            <Badge variant="secondary" className="font-mono text-[10px] uppercase tracking-wide">
+                              {c.failureStage.replace(/_/g, ' ')}
+                            </Badge>
+                          )}
+                          {c.amdResult && (
+                            <Badge variant="secondary" className="font-mono text-[10px]">
+                              AMD {c.amdResult}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-foreground">{summary}</p>
+                        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                          {c.contactName && <span>Contact: {c.contactName}</span>}
+                          <span>Time: {new Date(c.startTime).toLocaleString()}</span>
+                          <span>
+                            Duration: {c.duration != null ? `${Math.floor(c.duration / 60)}m ${c.duration % 60}s` : '—'}
+                          </span>
+                          {c.routedAgent?.name && (
+                            <span>Agent: {c.routedAgent.name}{c.routedAgent.extension ? ` (${c.routedAgent.extension})` : ''}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setExpandedCalls((prev) => ({ ...prev, [c._id]: !expanded }))}
+                        className="self-start"
+                      >
+                        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        {expanded ? 'Hide Trace' : 'Show Trace'}
+                      </Button>
+                    </div>
+
+                    {expanded && (
+                      <div className="mt-4 space-y-4 rounded-md border border-border/60 bg-secondary/20 p-4">
+                        {(c.failureReason || lastError) && (
+                          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="mt-0.5 h-4 w-4 text-destructive" />
+                              <div className="space-y-1 text-sm">
+                                <p className="font-medium text-foreground">Failure Summary</p>
+                                <p className="text-foreground">{c.failureReason ?? summary}</p>
+                                {lastError?.detail && lastError.detail !== c.failureReason && (
+                                  <p className="font-mono text-xs text-muted-foreground">{lastError.detail}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {c.trace && c.trace.length > 0 ? (
+                          <div className="space-y-3">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Trace Timeline</p>
+                            {c.trace.map((entry, index) => (
+                              <div key={`${c._id}-${entry.at}-${index}`} className="flex gap-3">
+                                <div className="flex flex-col items-center">
+                                  <CircleDot className={cn('mt-0.5 h-4 w-4', TRACE_LEVEL_STYLES[entry.level])} />
+                                  {index < c.trace.length - 1 && <div className="mt-1 h-full w-px bg-border" />}
+                                </div>
+                                <div className="min-w-0 flex-1 pb-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-sm font-medium text-foreground">{entry.title}</p>
+                                    <span className="text-[11px] text-muted-foreground">
+                                      {new Date(entry.at).toLocaleTimeString()}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-xs text-muted-foreground">{entry.detail ?? entry.step}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            No detailed trace was recorded for this call. New calls will show a step-by-step trace.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {false && (<Table className="min-w-190">
               <TableHeader>
                 <TableRow>
                   <TableHead>Phone</TableHead><TableHead>Disposition</TableHead>
@@ -299,7 +469,7 @@ export default function CampaignDetailPage() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </Table>)}
           )}
         </CardContent>
       </Card>

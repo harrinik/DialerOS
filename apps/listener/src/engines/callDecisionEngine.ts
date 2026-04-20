@@ -54,6 +54,8 @@ interface ChannelContext {
   maxDurationTimer?: boolean;    // ISSUE-30: flag that watchdog is active
 }
 
+type TraceLevel = 'info' | 'success' | 'warning' | 'error';
+
 // -------------------------------------------------------------------------
 
 export class CallDecisionEngine {
@@ -105,6 +107,56 @@ export class CallDecisionEngine {
     this.gateway.emitCallEvent({ ...event, timestamp: new Date().toISOString() });
   }
 
+  private async appendTrace(
+    callLogId: string,
+    step: string,
+    level: TraceLevel,
+    title: string,
+    detail?: string,
+  ): Promise<void> {
+    await CallLog.updateOne(
+      { _id: callLogId },
+      {
+        $push: {
+          trace: {
+            at: new Date(),
+            step,
+            level,
+            title,
+            ...(detail ? { detail } : {}),
+          },
+        },
+      },
+    );
+  }
+
+  private async setFailureInfo(
+    callLogId: string,
+    stage: string,
+    reason: string,
+    detail?: string,
+  ): Promise<void> {
+    await CallLog.updateOne(
+      { _id: callLogId },
+      {
+        $set: {
+          failureStage: stage,
+          failureReason: reason,
+          notes: reason,
+        },
+        $push: {
+          trace: {
+            at: new Date(),
+            step: stage,
+            level: 'error',
+            title: 'Call encountered an error',
+            detail: detail ?? reason,
+          },
+        },
+      },
+    );
+  }
+
   /** ISSUE-27: IVR flow cached in Redis for 5 minutes */
   private async getIvrFlow(flowId: string): Promise<IvrFlow | null> {
     const cacheKey = `ivr_flow_cache:${flowId}`;
@@ -142,6 +194,13 @@ export class CallDecisionEngine {
     await CallLog.updateOne(
       { _id: ctx.callLogId },
       { $set: { uniqueId: channel.id, startTime: new Date(event.timestamp) } },
+    );
+    await this.appendTrace(
+      ctx.callLogId,
+      'stasis_start',
+      'success',
+      'Channel entered the Asterisk application',
+      `Asterisk created channel ${channelId} and handed it to the dialer app.`,
     );
 
     // ISSUE-30: Start max call duration watchdog
@@ -185,6 +244,13 @@ export class CallDecisionEngine {
         { _id: ctx.callLogId },
         { $set: { answerTime: new Date(event.timestamp), disposition: 'answered' } },
       );
+      await this.appendTrace(
+        ctx.callLogId,
+        'channel_answered',
+        'success',
+        'Remote party answered',
+        'The destination answered and the channel entered the Up state.',
+      );
       this.emitCallEvent({ type: 'call:answered', callLogId: ctx.callLogId, contactId: ctx.contactId, campaignId: ctx.campaignId, channelId });
 
       // ISSUE-17: If AMD is disabled on this campaign, route immediately without waiting for AMDSTATUS
@@ -195,6 +261,13 @@ export class CallDecisionEngine {
         else await this.routeToAgent(channelId, ctx);
       }
     } else if (channel.state === 'Ringing') {
+      await this.appendTrace(
+        ctx.callLogId,
+        'channel_ringing',
+        'info',
+        'Remote endpoint is ringing',
+        'Asterisk reported the outbound channel in Ringing state.',
+      );
       this.emitCallEvent({ type: 'call:ringing', callLogId: ctx.callLogId, contactId: ctx.contactId, campaignId: ctx.campaignId, channelId });
     }
   }
@@ -211,6 +284,13 @@ export class CallDecisionEngine {
 
     logger.info({ channelId, amdResult }, 'AMD result received');
     await CallLog.updateOne({ _id: ctx.callLogId }, { $set: { amdResult } });
+    await this.appendTrace(
+      ctx.callLogId,
+      'amd_result',
+      amdResult === 'HUMAN' ? 'success' : amdResult === 'NOTSURE' ? 'warning' : 'info',
+      'Answering machine detection finished',
+      `AMD result: ${amdResult}.`,
+    );
 
     // ISSUE-18: use shared constant for answer-rate key (was 'pacing:answer_rate:X', correct is 'answer_rate:X')
     await this.recordAnswerRateDataPoint(ctx.campaignId, amdResult === 'HUMAN');
@@ -219,6 +299,15 @@ export class CallDecisionEngine {
       await CallLog.updateOne({ _id: ctx.callLogId }, { $set: { disposition: 'machine' } });
       await Contact.updateOne({ _id: ctx.contactId }, { $set: { status: 'machine' } });
       await Campaign.updateOne({ _id: ctx.campaignId }, { $inc: { 'stats.machines': 1 } });
+      await this.appendTrace(
+        ctx.callLogId,
+        'machine_detected',
+        'warning',
+        'Machine detected',
+        ctx.amdAction === 'hangup'
+          ? 'AMD detected a machine and the campaign is configured to hang up.'
+          : 'AMD detected a machine and the campaign is configured to continue.',
+      );
       this.emitCallEvent({ type: 'call:machine', callLogId: ctx.callLogId, contactId: ctx.contactId, campaignId: ctx.campaignId, channelId, amdResult });
 
       if (ctx.amdAction === 'hangup') {
@@ -280,7 +369,46 @@ export class CallDecisionEngine {
     const duration = Math.round((endTime.getTime() - startTime.getTime()) / 1000);
     const disposition: CallDisposition = (callLog?.disposition as CallDisposition) ?? 'no_answer';
 
-    await CallLog.updateOne({ _id: ctx.callLogId }, { $set: { endTime, duration, disposition } });
+    const existingFailureReason =
+      typeof (callLog as { failureReason?: unknown } | null)?.failureReason === 'string'
+        ? (callLog as { failureReason?: string }).failureReason
+        : undefined;
+    const fallbackFailureReason = disposition === 'no_answer'
+      ? 'The destination never answered before the call ended.'
+      : disposition === 'busy'
+        ? 'The destination reported busy.'
+        : disposition === 'cancelled'
+          ? 'The call was cancelled before completion.'
+          : disposition === 'failed'
+            ? 'The call failed before a stable conversation was established.'
+            : undefined;
+
+    await CallLog.updateOne(
+      { _id: ctx.callLogId },
+      {
+        $set: {
+          endTime,
+          duration,
+          disposition,
+          ...(!existingFailureReason && fallbackFailureReason
+            ? {
+                failureStage: 'call_end',
+                failureReason: fallbackFailureReason,
+                notes: fallbackFailureReason,
+              }
+            : {}),
+        },
+        $push: {
+          trace: {
+            at: endTime,
+            step: 'call_end',
+            level: disposition === 'answered' ? 'success' : disposition === 'machine' ? 'warning' : 'info',
+            title: `Call ended with disposition ${disposition.replace(/_/g, ' ')}`,
+            detail: duration > 0 ? `Duration ${duration}s.` : 'Call ended before audio bridged for a meaningful duration.',
+          },
+        },
+      },
+    );
 
     const isRetryable = RETRYABLE_DISPOSITIONS.has(disposition) && disposition !== 'machine';
     await Contact.updateOne({ _id: ctx.contactId }, { $set: { status: isRetryable ? 'retry_scheduled' : 'completed' } });
@@ -374,6 +502,12 @@ export class CallDecisionEngine {
     const flow = await this.getIvrFlow(ctx.ivrFlowId); // ISSUE-27: uses Redis cache
     if (!flow) {
       logger.error({ ivrFlowId: ctx.ivrFlowId }, 'IVR flow not found');
+      await this.setFailureInfo(
+        ctx.callLogId,
+        'ivr_start',
+        `IVR flow ${ctx.ivrFlowId} could not be loaded.`,
+        'The call reached the IVR stage, but the configured flow record was missing.',
+      );
       await this.ari.hangupChannel(channelId, 'normal');
       return;
     }
@@ -381,12 +515,25 @@ export class CallDecisionEngine {
     const entryStep = flow.steps.find((s) => s.id === flow.entryStepId);
     if (!entryStep) {
       logger.error({ flowId: ctx.ivrFlowId }, 'IVR entry step not found');
+      await this.setFailureInfo(
+        ctx.callLogId,
+        'ivr_start',
+        `IVR flow ${ctx.ivrFlowId} has no valid entry step.`,
+        'The IVR configuration is incomplete, so the call could not continue.',
+      );
       await this.ari.hangupChannel(channelId, 'normal');
       return;
     }
 
     ctx.currentStepId = entryStep.id;
     await this.setChannelContext(channelId, ctx);
+    await this.appendTrace(
+      ctx.callLogId,
+      'ivr_start',
+      'info',
+      'IVR flow started',
+      `Entering IVR flow ${flow._id} at step ${entryStep.id}.`,
+    );
     await this.executeIvrStep(channelId, ctx, flow, entryStep);
   }
 
@@ -399,6 +546,13 @@ export class CallDecisionEngine {
     }
 
     logger.info({ channelId, stepId: step.id, stepType: step.type }, 'Executing IVR step');
+    await this.appendTrace(
+      ctx.callLogId,
+      `ivr_${step.type}`,
+      'info',
+      `IVR step: ${step.type}`,
+      step.label ? `Step ${step.id} (${step.label}).` : `Step ${step.id}.`,
+    );
 
     switch (step.type) {
       case 'play': {
@@ -501,6 +655,12 @@ export class CallDecisionEngine {
 
     if (!branch) {
       logger.warn({ channelId, collectedDigit }, 'No IVR branch matched');
+      await this.setFailureInfo(
+        ctx.callLogId,
+        'ivr_dtmf',
+        `No IVR branch matched the collected digits "${collectedDigit}".`,
+        'The caller entered digits that were not mapped to a valid IVR branch.',
+      );
       await this.ari.hangupChannel(channelId, 'normal');
       return;
     }
@@ -508,12 +668,25 @@ export class CallDecisionEngine {
     const nextStep = flow.steps.find((s) => s.id === branch.nextStepId);
     if (!nextStep) {
       logger.error({ nextStepId: branch.nextStepId }, 'Next IVR step not found');
+      await this.setFailureInfo(
+        ctx.callLogId,
+        'ivr_dtmf',
+        `IVR branch pointed to missing step ${branch.nextStepId}.`,
+        'The IVR branch configuration references a step that does not exist.',
+      );
       await this.ari.hangupChannel(channelId, 'normal');
       return;
     }
 
     ctx.currentStepId = nextStep.id;
     await this.setChannelContext(channelId, ctx);
+    await this.appendTrace(
+      ctx.callLogId,
+      'dtmf_collected',
+      'success',
+      'DTMF input matched a branch',
+      `Digits "${collectedDigit}" routed the call to step ${nextStep.id}.`,
+    );
     await this.executeIvrStep(channelId, ctx, flow, nextStep);
   }
 
@@ -525,6 +698,16 @@ export class CallDecisionEngine {
     preferredAgentPool: string[] = [],
     requiredSkill?: string,
   ): Promise<void> {
+    await this.appendTrace(
+      ctx.callLogId,
+      'agent_routing_start',
+      'info',
+      'Looking for an available agent',
+      preferredAgentPool.length > 0
+        ? `Searching preferred agent pool with ${preferredAgentPool.length} agents.`
+        : 'Searching the campaign agent pool for an available agent.',
+    );
+
     // Build query: filter by pool + status, sort by priority (desc) then oldest available (by updatedAt)
     const andConditions: Record<string, unknown>[] = [
       { status: 'available' },
@@ -557,6 +740,13 @@ export class CallDecisionEngine {
 
     const agentId = String(agent._id);
     logger.info({ channelId, agentId, sipEndpoint: agent.sipEndpoint }, 'Routing call to agent');
+    await this.appendTrace(
+      ctx.callLogId,
+      'agent_reserved',
+      'success',
+      'Reserved an agent for the call',
+      `Selected agent ${agentId} on endpoint ${agent.sipEndpoint}.`,
+    );
 
     // ISSUE-12: Agent routing watchdog — expires in 60s; periodic job resets stuck-busy agents
     await this.redis.setex(`agent:routing:${agentId}`, 60, ctx.callLogId);
@@ -591,6 +781,13 @@ export class CallDecisionEngine {
       if (agentCtx) { agentCtx.bridgeId = bridge.id; await this.setChannelContext(agentChannelId, agentCtx); }
 
       await CallLog.updateOne({ _id: ctx.callLogId }, { $set: { routedToAgentId: agent._id, disposition: 'answered' } });
+      await this.appendTrace(
+        ctx.callLogId,
+        'agent_bridged',
+        'success',
+        'Customer and agent channels were bridged',
+        `Bridge ${bridge.id} connected the customer call to agent ${agentId}.`,
+      );
 
       // Clear routing watchdog — successfully routed
       await this.redis.del(`agent:routing:${agentId}`);
@@ -599,6 +796,13 @@ export class CallDecisionEngine {
       this.gateway.emitAgentEvent({ type: 'agent:busy', agentId, campaignId: ctx.campaignId, timestamp: new Date().toISOString() });
     } catch (err) {
       logger.error({ err, agentId }, 'Failed to route to agent');
+      const reason = err instanceof Error ? err.message : String(err);
+      await this.setFailureInfo(
+        ctx.callLogId,
+        'agent_routing',
+        reason,
+        `Routing failed while trying to connect agent ${agentId} on ${agent.sipEndpoint}.`,
+      );
       await Agent.updateOne({ _id: agent._id }, { $set: { status: 'available', currentCallId: null } });
       await this.redis.del(`agent:routing:${agentId}`);
 
@@ -616,6 +820,13 @@ export class CallDecisionEngine {
   /** ISSUE-06: Payload built programmatically — no string substitution / JSON injection risk */
   private async fireWebhook(channelId: string, ctx: ChannelContext, step: IvrStep, flow: IvrFlow): Promise<void> {
     if (!step.webhookUrl) { logger.error({ stepId: step.id }, 'Webhook step has no URL'); return; }
+    await this.appendTrace(
+      ctx.callLogId,
+      'webhook_request',
+      'info',
+      'Calling webhook',
+      `Sending ${step.webhookMethod ?? 'POST'} request to ${step.webhookUrl}.`,
+    );
 
     const callLog = await CallLog.findById(ctx.callLogId).lean();
 
@@ -647,8 +858,22 @@ export class CallDecisionEngine {
       });
       success = response.status >= 200 && response.status < 300;
       responseText = JSON.stringify(response.data).slice(0, 500);
+      await this.appendTrace(
+        ctx.callLogId,
+        'webhook_response',
+        'success',
+        'Webhook responded successfully',
+        responseText || 'Webhook returned an empty response body.',
+      );
     } catch (err) {
       logger.error({ err, url: step.webhookUrl }, 'Webhook request failed');
+      const reason = err instanceof Error ? err.message : String(err);
+      await this.setFailureInfo(
+        ctx.callLogId,
+        'webhook',
+        reason,
+        `Webhook call to ${step.webhookUrl} failed.`,
+      );
     }
 
     await CallLog.updateOne({ _id: ctx.callLogId }, { $set: { webhookFired: true, webhookResponse: responseText } });

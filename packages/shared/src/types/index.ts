@@ -147,6 +147,14 @@ export interface DtmfEntry {
   receivedAt: Date;
 }
 
+export interface CallTraceEntry {
+  at: Date;
+  step: string;
+  level: 'info' | 'success' | 'warning' | 'error';
+  title: string;
+  detail?: string;
+}
+
 export interface CallLog {
   _id: string;
   contactId: string;
@@ -168,6 +176,9 @@ export interface CallLog {
   retryable: boolean;
   attempt: number;
   notes?: string;
+  failureStage?: string;
+  failureReason?: string;
+  trace: CallTraceEntry[];
   createdAt: Date;
 }
 
