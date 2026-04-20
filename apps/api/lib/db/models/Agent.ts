@@ -5,7 +5,7 @@ export interface IAgent extends Document {
   name: string;
   extension: string;
   sipEndpoint: string;
-  status: 'available' | 'busy' | 'offline' | 'break';
+  status: 'available' | 'busy' | 'offline' | 'paused' | 'wrapup' | 'training';
   currentCallId?: mongoose.Types.ObjectId;
   campaignIds: mongoose.Types.ObjectId[];
   maxConcurrentCalls: number;
