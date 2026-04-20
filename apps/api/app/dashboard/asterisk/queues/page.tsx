@@ -58,7 +58,7 @@ export default function QueuesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div><h1 className="text-2xl font-bold">Call Queues</h1>
           <p className="text-sm text-muted-foreground mt-1">ACD queues for agent distribution — managed via AMI</p></div>
         <div className="flex gap-2">
@@ -73,7 +73,7 @@ export default function QueuesPage() {
         <Card>
           <CardContent className="pt-4 space-y-4">
             <p className="font-semibold text-sm">Create Queue</p>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-1.5"><Label>Queue Name</Label><Input placeholder="sales" value={name} onChange={e => setName(e.target.value)} /></div>
               <div className="space-y-1.5"><Label>Strategy</Label>
                 <Select value={strategy} onValueChange={setStrategy}>
@@ -86,7 +86,7 @@ export default function QueuesPage() {
                 <Input placeholder="1001, 1002, 1003" value={members} onChange={e => setMembers(e.target.value)} />
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Button onClick={create} disabled={creating || !name}>
                 {creating ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating…</> : 'Create Queue'}
               </Button>
@@ -106,7 +106,7 @@ export default function QueuesPage() {
                 <p className="text-sm text-muted-foreground">No queues found. Create one above.</p>
               </div>
             ) : (
-              <Table>
+              <Table className="min-w-235">
                 <TableHeader><TableRow>
                   <TableHead>Queue</TableHead><TableHead>Strategy</TableHead>
                   <TableHead>Active Calls</TableHead><TableHead>Max</TableHead>
@@ -121,7 +121,7 @@ export default function QueuesPage() {
                       <TableCell className="tabular-nums text-muted-foreground">{q.max ?? '∞'}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Input className="w-24 h-7 text-xs" placeholder="ext…"
+                          <Input className="h-7 w-20 text-xs sm:w-24" placeholder="ext…"
                             value={actionQueue === q.name ? addExt : ''}
                             onChange={e => { setActionQueue(q.name); setAddExt(e.target.value); }} />
                           <Button size="sm" variant="secondary" title="Add member"

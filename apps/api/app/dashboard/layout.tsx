@@ -7,7 +7,7 @@ import {
   LayoutDashboard, BarChart3, PhoneCall, Users, UserCog,
   GitBranch, ShieldOff, Zap, CheckCircle2, AlertCircle, AlertTriangle,
   Radio, Link2, Server, Music, PhoneOff, ArrowDownLeft,
-  Layers, Map, Mic, Settings2, LogOut,
+  Layers, Map, Mic, Settings2, LogOut, Menu, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
@@ -71,6 +71,7 @@ function StatusIcon({ status }: { status: HealthCheck['status'] | undefined }) {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [health, setHealth] = useState<HealthCheck | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { user, logout } = useAuth();
 
   useEffect(() => {
@@ -85,10 +86,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex min-h-dvh bg-background">
+      {mobileNavOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation overlay"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
       {/* ── Sidebar ── */}
-      <aside className="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-sidebar-border bg-sidebar">
+      <aside className={cn(
+        'fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] shrink-0 flex-col overflow-y-auto border-r border-sidebar-border bg-sidebar transition-transform md:sticky md:top-0 md:z-auto md:h-dvh md:w-64 md:max-w-none',
+        mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+      )}>
         {/* Logo */}
         <div className="px-6 py-5">
           <div className="flex items-center gap-2">
@@ -207,8 +223,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* ── Main ── */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-7xl px-8 py-8 animate-fade-in">
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-30 border-b border-border/60 bg-background/90 px-4 py-3 backdrop-blur md:hidden">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen((open) => !open)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-card text-foreground"
+              aria-label="Toggle navigation"
+            >
+              {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
+            <p className="text-sm font-semibold">DialerOS</p>
+            <button
+              onClick={logout}
+              title="Sign out"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:text-destructive"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8 animate-fade-in">
           {children}
         </div>
       </main>

@@ -109,7 +109,7 @@ export default function DashboardPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Live Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-1">Real-time call activity and system health</p>
@@ -123,7 +123,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI grid */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 mb-6">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
           return (
@@ -140,7 +140,7 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
               {/* gradient top bar */}
-              <div className={cn('absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-accent opacity-0 group-hover:opacity-100 transition-opacity')} />
+              <div className={cn('absolute top-0 left-0 right-0 h-0.5 bg-linear-to-r from-primary to-accent opacity-0 group-hover:opacity-100 transition-opacity')} />
             </Card>
           );
         })}
@@ -166,30 +166,32 @@ export default function DashboardPage() {
                 <p className="text-sm">No active calls</p>
               </div>
             ) : (
-              <table className="w-full text-sm mt-3">
-                <thead>
-                  <tr className="text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
-                    <th className="text-left pb-2 font-medium">Phone</th>
-                    <th className="text-left pb-2 font-medium">Status</th>
-                    <th className="text-left pb-2 font-medium">Duration</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeCalls.map((call) => (
-                    <tr key={call.callLogId} className="border-b border-border/50 hover:bg-secondary/40 transition-colors">
-                      <td className="py-2.5 font-mono text-xs">{call.phone ?? '—'}</td>
-                      <td className="py-2.5">
-                        <span className={cn('text-xs font-medium', STATUS_MAP[call.status]?.color ?? 'text-muted-foreground')}>
-                          {STATUS_MAP[call.status]?.label ?? call.status}
-                        </span>
-                      </td>
-                      <td className="py-2.5 font-mono text-xs text-muted-foreground">
-                        <CallTimer startedAt={call.startedAt} />
-                      </td>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-130 text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="pb-2 text-left font-medium">Phone</th>
+                      <th className="pb-2 text-left font-medium">Status</th>
+                      <th className="pb-2 text-left font-medium">Duration</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {activeCalls.map((call) => (
+                      <tr key={call.callLogId} className="border-b border-border/50 transition-colors hover:bg-secondary/40">
+                        <td className="py-2.5 font-mono text-xs">{call.phone ?? '—'}</td>
+                        <td className="py-2.5">
+                          <span className={cn('text-xs font-medium', STATUS_MAP[call.status]?.color ?? 'text-muted-foreground')}>
+                            {STATUS_MAP[call.status]?.label ?? call.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 font-mono text-xs text-muted-foreground">
+                          <CallTimer startedAt={call.startedAt} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -208,16 +210,16 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 recentEvents.map((event, i) => (
-                  <div key={`${event.callLogId}-${i}`} className="flex items-center gap-3 rounded-md bg-secondary/50 px-3 py-2 text-xs">
-                    <span className={cn('font-mono font-semibold w-16 shrink-0', EVENT_COLORS[event.type] ?? 'text-muted-foreground')}>
+                  <div key={`${event.callLogId}-${i}`} className="flex flex-wrap items-center gap-2 rounded-md bg-secondary/50 px-3 py-2 text-xs sm:flex-nowrap sm:gap-3">
+                    <span className={cn('w-16 shrink-0 font-mono font-semibold', EVENT_COLORS[event.type] ?? 'text-muted-foreground')}>
                       {event.type.split(':')[1]?.toUpperCase()}
                     </span>
-                    <span className="flex-1 font-mono text-muted-foreground truncate">
+                    <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
                       {event.phone ?? event.callLogId.slice(-8)}
                       {event.digit ? ` [${event.digit}]` : ''}
                       {event.amdResult ? ` (${event.amdResult})` : ''}
                     </span>
-                    <span className="shrink-0 text-muted-foreground">
+                    <span className="w-full text-muted-foreground sm:w-auto">
                       {new Date(event.timestamp).toLocaleTimeString()}
                     </span>
                   </div>

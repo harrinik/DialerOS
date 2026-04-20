@@ -61,7 +61,7 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Campaigns</h1>
           <p className="text-sm text-muted-foreground mt-1">{campaigns.length} total campaigns</p>
@@ -74,13 +74,13 @@ export default function CampaignsPage() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-4">
-          <div className="flex gap-3 flex-wrap">
-            <div className="relative flex-1 min-w-48">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <div className="relative w-full flex-1 sm:min-w-48">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input className="pl-8" placeholder="Search name or caller ID..." value={filter.q}
                 onChange={(e) => setFilter({ ...filter, q: e.target.value })} />
             </div>
-            <div className="min-w-40">
+            <div className="w-full sm:w-auto sm:min-w-40">
               <Select value={filter.status} onValueChange={(v) => setFilter({ ...filter, status: v === 'all' ? '' : v })}>
                 <SelectTrigger><SelectValue placeholder="All statuses" /></SelectTrigger>
                 <SelectContent>
@@ -104,7 +104,7 @@ export default function CampaignsPage() {
               <p className="text-sm text-muted-foreground">No campaigns found</p>
             </div>
           ) : (
-            <Table>
+            <Table className="min-w-245">
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>

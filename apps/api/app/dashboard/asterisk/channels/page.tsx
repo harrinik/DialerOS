@@ -63,7 +63,7 @@ export default function ChannelsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Live Channels</h1>
           <p className="text-sm text-muted-foreground mt-1">{channels.length} active channel{channels.length !== 1 ? 's' : ''} · auto-refreshes every 3s</p>
@@ -77,15 +77,15 @@ export default function ChannelsPage() {
       <Card>
         <CardContent className="pt-4">
           <p className="text-sm font-medium mb-3">Supervisor Spy / Barge-in</p>
-          <div className="flex gap-3 flex-wrap">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <div className="space-y-1.5">
               <Label className="text-xs">Your Extension</Label>
-              <Input className="w-32" placeholder="9000" value={spyExt} onChange={e => setSpyExt(e.target.value)} />
+              <Input className="w-full sm:w-32" placeholder="9000" value={spyExt} onChange={e => setSpyExt(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Mode</Label>
               <Select value={spyMode} onValueChange={setSpyMode}>
-                <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="q">Listen only</SelectItem>
                   <SelectItem value="w">Whisper to agent</SelectItem>
@@ -93,7 +93,7 @@ export default function ChannelsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-end"><p className="text-xs text-muted-foreground pb-2">Click 👁 on any call row to activate spy on that channel.</p></div>
+            <div className="flex items-end"><p className="pb-2 text-xs text-muted-foreground">Click 👁 on any call row to activate spy on that channel.</p></div>
           </div>
         </CardContent>
       </Card>
@@ -108,7 +108,7 @@ export default function ChannelsPage() {
                 <p className="text-sm text-muted-foreground">No active channels. Calls will appear here in real-time.</p>
               </div>
             ) : (
-              <Table>
+              <Table className="min-w-245">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Channel</TableHead><TableHead>State</TableHead>

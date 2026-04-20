@@ -298,7 +298,7 @@ export default function SystemInfoPage() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Activity className="h-6 w-6 text-primary" /> System Diagnostics & Logs
@@ -469,7 +469,7 @@ export default function SystemInfoPage() {
             <Separator />
             <CardContent className="pt-0 px-0">
               <div
-                className="h-72 overflow-y-auto font-mono text-xs bg-black/40 rounded-b-lg"
+                className="h-72 overflow-auto font-mono text-xs bg-black/40 rounded-b-lg"
                 onScroll={(e) => {
                   const el = e.currentTarget;
                   const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -481,7 +481,7 @@ export default function SystemInfoPage() {
                     No log entries yet — run diagnostics or AMI commands to see output here
                   </div>
                 ) : (
-                  <table className="w-full">
+                  <table className="w-full min-w-180">
                     <tbody>
                       {visibleLogs.map(entry => (
                         <tr
@@ -492,16 +492,16 @@ export default function SystemInfoPage() {
                             entry.level === 'warn'  && 'bg-warning/5',
                           )}
                         >
-                          <td className="pl-4 pr-2 py-1 text-muted-foreground/60 whitespace-nowrap w-20 text-[10px]">
+                          <td className="w-20 whitespace-nowrap py-1 pl-4 pr-2 text-[10px] text-muted-foreground/60">
                             {entry.ts.toLocaleTimeString()}
                           </td>
                           <td className="pr-3 py-1 whitespace-nowrap">
                             <LogLevelBadge level={entry.level} />
                           </td>
-                          <td className="pr-3 py-1 text-muted-foreground/70 whitespace-nowrap w-24 truncate text-[10px]">
+                          <td className="w-24 whitespace-nowrap py-1 pr-3 text-[10px] text-muted-foreground/70">
                             {entry.category}
                           </td>
-                          <td className="py-1 pr-4 text-foreground/80 whitespace-pre-wrap break-all leading-relaxed">
+                          <td className="py-1 pr-4 leading-relaxed text-foreground/80 whitespace-pre-wrap break-all">
                             {entry.message}
                           </td>
                         </tr>
@@ -563,7 +563,7 @@ export default function SystemInfoPage() {
             <p className="text-xs text-muted-foreground">
               Run any Asterisk CLI command via AMI. Output appears here and in the log viewer.
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Input
                 className="font-mono text-sm"
                 placeholder="core show version"

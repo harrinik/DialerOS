@@ -111,7 +111,7 @@ export default function AgentsPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {[{ label: 'Available', count: counts.available, color: 'text-success', icon: CheckCircle2 },
           { label: 'On Call', count: counts.busy, color: 'text-primary', icon: Phone },
           { label: 'Offline', count: counts.offline, color: 'text-muted-foreground', icon: PowerOff }].map((s) => {
@@ -135,7 +135,7 @@ export default function AgentsPage() {
           <CardHeader><CardTitle className="text-base">New Agent</CardTitle></CardHeader>
           <Separator />
           <CardContent className="pt-4">
-            <form onSubmit={(e) => void handleCreate(e)} className="grid grid-cols-2 gap-4">
+            <form onSubmit={(e) => void handleCreate(e)} className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Name</Label>
                 <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -200,7 +200,7 @@ export default function AgentsPage() {
                       <TableCell className="font-mono text-xs">{a.maxConcurrentCalls}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{new Date(a.updatedAt).toLocaleString()}</TableCell>
                       <TableCell>
-                        <div className="flex gap-1">
+                        <div className="flex flex-wrap gap-1">
                           {a.status !== 'available' && <Button size="sm" variant="success" onClick={() => void setStatus(a._id, 'available')}>Available</Button>}
                           {a.status !== 'offline' && <Button size="sm" variant="secondary" onClick={() => void setStatus(a._id, 'offline')}>Offline</Button>}
                           <Button size="sm" variant="outline" onClick={() => void issueQrLogin(a._id)}>
@@ -236,7 +236,7 @@ export default function AgentsPage() {
             {qrImage && (
               <div className="inline-flex flex-col gap-2 items-start">
                 <p className="text-sm text-muted-foreground">Scan this QR code to login as the selected agent:</p>
-                <img src={qrImage} alt="Agent QR login code" className="h-44 w-44 rounded border bg-white p-2" />
+                <img src={qrImage} alt="Agent QR login code" className="h-auto w-full max-w-44 rounded border bg-white p-2" />
               </div>
             )}
           </CardContent>

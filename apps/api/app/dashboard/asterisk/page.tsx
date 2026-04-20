@@ -211,7 +211,7 @@ export default function AsteriskHubPage() {
           </CardHeader>
           <Separator />
           <CardContent className="pt-4 space-y-4">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="col-span-2 space-y-1.5">
                 <Label>Host</Label>
                 <Input
@@ -234,7 +234,7 @@ export default function AsteriskHubPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Username</Label>
                 <Input
@@ -257,7 +257,7 @@ export default function AsteriskHubPage() {
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>App Name</Label>
                 <Input
@@ -294,7 +294,7 @@ export default function AsteriskHubPage() {
           <Separator />
           <CardContent className="pt-4 space-y-4">
             <p className="text-xs text-muted-foreground">Leave blank to use the same host as ARI with port 5038.</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="col-span-2 space-y-1.5">
                 <Label>Host (optional)</Label>
                 <Input
@@ -314,7 +314,7 @@ export default function AsteriskHubPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Username (optional)</Label>
                 <Input
@@ -413,7 +413,7 @@ export default function AsteriskHubPage() {
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <Button onClick={save} disabled={saving || loading}>
           {saving
             ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
@@ -437,7 +437,7 @@ export default function AsteriskHubPage() {
       <Card>
         <CardContent className="pt-4">
           <p className="text-sm font-medium mb-3">Next steps after connecting:</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
             {[
               { href: '/dashboard/asterisk/trunks',    label: '1. Add SIP Trunk',    icon: '🔗' },
               { href: '/dashboard/asterisk/endpoints', label: '2. Create Extensions', icon: '📞' },

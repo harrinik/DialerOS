@@ -68,8 +68,8 @@ export default function ContactsPage() {
 
       <Card>
         <CardContent className="pt-4">
-          <div className="flex gap-3 flex-wrap items-end">
-            <div className="flex-1 min-w-48 space-y-1.5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="w-full flex-1 space-y-1.5 sm:min-w-48">
               <Label>Search name / phone</Label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -77,7 +77,7 @@ export default function ContactsPage() {
                   onChange={(e) => { setFilter({ ...filter, q: e.target.value }); setPage(1); }} />
               </div>
             </div>
-            <div className="min-w-44 space-y-1.5">
+            <div className="w-full space-y-1.5 sm:w-auto sm:min-w-44">
               <Label>Campaign</Label>
               <Select value={filter.campaignId} onValueChange={(v) => { setFilter({ ...filter, campaignId: v === 'all' ? '' : v }); setPage(1); }}>
                 <SelectTrigger><SelectValue placeholder="All campaigns" /></SelectTrigger>
@@ -87,7 +87,7 @@ export default function ContactsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="min-w-44 space-y-1.5">
+            <div className="w-full space-y-1.5 sm:w-auto sm:min-w-44">
               <Label>Status</Label>
               <Select value={filter.status} onValueChange={(v) => { setFilter({ ...filter, status: v === 'all' ? '' : v }); setPage(1); }}>
                 <SelectTrigger><SelectValue placeholder="All statuses" /></SelectTrigger>
@@ -112,7 +112,7 @@ export default function ContactsPage() {
             </div>
           ) : (
             <>
-              <Table>
+              <Table className="min-w-215">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead><TableHead>Phone</TableHead><TableHead>Status</TableHead>

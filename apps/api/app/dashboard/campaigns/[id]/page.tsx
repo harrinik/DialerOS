@@ -83,7 +83,7 @@ export default function CampaignDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2.5 mb-1">
             <Link href="/dashboard/campaigns" className="text-muted-foreground hover:text-foreground transition-colors text-sm">
@@ -107,7 +107,7 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: 'Total Contacts', value: campaign.stats.total.toLocaleString(), icon: Phone, color: 'text-primary' },
           { label: 'Answered', value: campaign.stats.answered.toLocaleString(), icon: CheckCircle2, color: 'text-success' },
@@ -156,23 +156,21 @@ export default function CampaignDetailPage() {
           <CardHeader><CardTitle className="text-base">Configuration</CardTitle></CardHeader>
           <Separator />
           <CardContent className="pt-4">
-            <table className="w-full text-sm">
-              <tbody>
-                {[
-                  ['Concurrency', `${campaign.concurrency}× simultaneous`],
-                  ['AMD Action', campaign.amdAction],
-                  ['Max Retries', String(campaign.maxRetries)],
-                  ['IVR Flow', campaign.ivrFlowId?.name ?? 'Direct route'],
-                  ['Caller ID', `${campaign.callerIdName} <${campaign.callerIdNumber}>`],
-                  ['SIP Trunk', campaign.sipTrunk],
-                ].map(([k, v]) => (
-                  <tr key={k} className="border-b border-border/50">
-                    <td className="py-2.5 text-xs text-muted-foreground w-40">{k}</td>
-                    <td className="py-2.5 text-xs font-mono text-foreground">{v}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="space-y-2">
+              {[
+                ['Concurrency', `${campaign.concurrency}× simultaneous`],
+                ['AMD Action', campaign.amdAction],
+                ['Max Retries', String(campaign.maxRetries)],
+                ['IVR Flow', campaign.ivrFlowId?.name ?? 'Direct route'],
+                ['Caller ID', `${campaign.callerIdName} <${campaign.callerIdNumber}>`],
+                ['SIP Trunk', campaign.sipTrunk],
+              ].map(([k, v]) => (
+                <div key={k} className="rounded-md border border-border/60 px-3 py-2 sm:grid sm:grid-cols-[10rem_1fr] sm:gap-3">
+                  <p className="text-xs text-muted-foreground">{k}</p>
+                  <p className="break-all text-xs font-mono text-foreground">{v}</p>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -185,7 +183,7 @@ export default function CampaignDetailPage() {
           {recentCalls.length === 0 ? (
             <p className="text-center text-muted-foreground py-10 text-sm">No calls recorded yet</p>
           ) : (
-            <Table>
+            <Table className="min-w-190">
               <TableHeader>
                 <TableRow>
                   <TableHead>Phone</TableHead><TableHead>Disposition</TableHead>
