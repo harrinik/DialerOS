@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "node --env-file=../../.env node_modules/next/dist/bin/next dev --port 3000",
-    "build": "next build",
+    "build": "node node_modules/next/dist/bin/next build",
     "start": "node --env-file=../../.env node_modules/next/dist/bin/next start --port 3000",
-    "lint": "next lint",
+    "lint": "node node_modules/next/dist/bin/next lint",
     "clean": "rm -rf .next"
   },
   "dependencies": {
@@ -54,6 +54,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "eslint-config-next": "^14.2.35",
     "typescript": "^5.5.0"
   }
 }

@@ -10,15 +10,15 @@
   "scripts": {
     "dev": "pnpm --filter @dialer/shared build && pnpm --parallel -r --filter=!@dialer/shared run dev",
     "dev:watch": "pnpm --parallel -r run dev",
-    "build": "pnpm --filter @dialer/shared build && pnpm -r --filter=!@dialer/shared run build",
-    "lint": "pnpm -r run lint",
-    "test": "pnpm -r run test",
+    "build": "pnpm --filter @dialer/shared build && pnpm --filter @dialer/db build && pnpm --filter @dialer/api build && pnpm --filter @dialer/listener build && pnpm --filter @dialer/worker build",
+    "lint": "pnpm --filter @dialer/api lint",
+    "test": "pnpm -r --if-present run test",
     "clean": "pnpm -r run clean"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
-    "eslint": "^9.0.0",
+    "eslint": "^8.57.0",
     "prettier": "^3.0.0",
     "typescript": "^5.5.0"
   }
