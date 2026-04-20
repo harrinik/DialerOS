@@ -26,7 +26,7 @@ function ariRequest(method: string, path: string, body?: unknown): Promise<Respo
     return fetch(url, {
       method,
       headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      ...(body !== undefined && { body: JSON.stringify(body) }),
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(10_000),
     });
   });
@@ -139,7 +139,7 @@ export const POST = withAuth(async (req: NextRequest, user: JwtPayload) => {
         password: String(payload['password'] ?? ''),
         username: String(payload['username'] ?? endpointName),
         nonce_type: 'MD5',
-        ...(payload['md5_cred'] && { md5_cred: String(payload['md5_cred']) }),
+        ...(payload['md5_cred'] ? { md5_cred: String(payload['md5_cred']) } : {}),
       };
       await ariPost(`/auth/${authName}`, authPayload);
       result.auth = authName;

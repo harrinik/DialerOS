@@ -30,7 +30,7 @@ function ariRequest(method: string, path: string, body?: unknown) {
     return fetch(url, {
       method,
       headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      ...(body !== undefined && { body: JSON.stringify(body) }),
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(10_000),
     });
   });
@@ -41,7 +41,10 @@ function ariGet<T = unknown>(path: string): Promise<T> {
 }
 
 function ariPost<T = unknown>(path: string, body?: unknown): Promise<T | null> {
-  return ariRequest('POST', path, body).then((r) => (r.status === 204 ? null : (r.json() as Promise<T>));
+  return ariRequest('POST', path, body).then((r) => {
+    if (r.status === 204) return null;
+    return r.json() as Promise<T>;
+  });
 }
 
 function ariDelete(path: string): Promise<void> {
@@ -49,7 +52,10 @@ function ariDelete(path: string): Promise<void> {
 }
 
 function ariPut<T = unknown>(path: string, body?: unknown): Promise<T | null> {
-  return ariRequest('PUT', path, body).then((r) => (r.status === 204 ? null : (r.json() as Promise<T>)));
+  return ariRequest('PUT', path, body).then((r) => {
+    if (r.status === 204) return null;
+    return r.json() as Promise<T>;
+  });
 }
 
 export const GET = withAuth(async (_req: NextRequest, _user: JwtPayload, { params }: RouteParams) => {

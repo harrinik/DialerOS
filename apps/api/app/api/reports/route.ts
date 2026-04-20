@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import mongoose from 'mongoose';
+import mongoose, { type PipelineStage } from 'mongoose';
 import { connectDb } from '@/lib/db/connection';
 import { CallLog } from '@/lib/db/models/CallLog';
 import { Campaign } from '@/lib/db/models/Campaign';
@@ -53,7 +53,7 @@ export const GET = withAuth(async (req: NextRequest, user: JwtPayload) => {
       : '%Y-%m-%d';
 
   // Aggregate call logs by time bucket
-  const timeSeriesResult = await CallLog.aggregate([
+  const timeSeriesPipeline: PipelineStage[] = [
     { $match: matchFilter },
     {
       $group: {
@@ -80,11 +80,12 @@ export const GET = withAuth(async (req: NextRequest, user: JwtPayload) => {
         total: { $sum: '$count' },
       },
     },
-    { $sort: { _id: 1 } },
-  ]);
+    { $sort: { _id: 1 as const } },
+  ];
+  const timeSeriesResult = await CallLog.aggregate(timeSeriesPipeline);
 
   // Overall summary
-  const summaryResult = await CallLog.aggregate([
+  const summaryPipeline: PipelineStage[] = [
     { $match: matchFilter },
     {
       $group: {
@@ -94,13 +95,15 @@ export const GET = withAuth(async (req: NextRequest, user: JwtPayload) => {
         totalDuration: { $sum: { $ifNull: ['$duration', 0] } },
       },
     },
-  ]);
+  ];
+  const summaryResult = await CallLog.aggregate(summaryPipeline);
 
   // AMD result breakdown
-  const amdResult = await CallLog.aggregate([
+  const amdPipeline: PipelineStage[] = [
     { $match: { ...matchFilter, amdResult: { $exists: true } } },
     { $group: { _id: '$amdResult', count: { $sum: 1 } } },
-  ]);
+  ];
+  const amdResult = await CallLog.aggregate(amdPipeline);
 
   // Campaign summary (admin sees all, user sees own)
   const campaignFilter =

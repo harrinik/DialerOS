@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { connectDb } from '@/lib/db/connection';
-import { HolidayCalendar } from '@/lib/db/models/HolidayCalendar';
+import { HolidayCalendar, type IHolidayCalendar } from '@/lib/db/models/HolidayCalendar';
 import { withAuth } from '@/lib/auth/rbac';
 import type { JwtPayload } from '@/lib/auth/jwt';
 
@@ -23,7 +23,7 @@ export const POST = withAuth(async (req: NextRequest, user: JwtPayload) => {
     return NextResponse.json({ error: 'name is required' }, { status: 400 });
   }
 
-  let calendar: HolidayCalendar | null = null;
+  let calendar: IHolidayCalendar | null = null;
 
   if (isDefault) {
     await HolidayCalendar.updateMany({ ownerId: user.sub }, { $set: { isDefault: false } });

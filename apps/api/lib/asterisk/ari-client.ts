@@ -46,7 +46,7 @@ async function request(method: string, path: string, body?: unknown): Promise<Re
   return fetch(url, {
     method,
     headers: { Authorization: auth, 'Content-Type': 'application/json' },
-    ...(body !== undefined && { body: JSON.stringify(body) }),
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     signal: AbortSignal.timeout(10_000),
   });
 }

@@ -8,6 +8,10 @@ export interface IUser extends Document {
   isActive: boolean;
   refreshTokens: string[];
   lastLogin?: Date;
+  mfaEnabled?: boolean;
+  mfaSecret?: string | null;
+  mfaMethod?: string | null;
+  mfaPending?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +37,10 @@ const UserSchema = new mongoose.Schema<IUser>(
     isActive: { type: Boolean, default: true, index: true },
     refreshTokens: { type: [String], default: [], select: false },
     lastLogin: Date,
+    mfaEnabled: { type: Boolean, default: false },
+    mfaSecret: { type: String, default: null, select: false },
+    mfaMethod: { type: String, default: null },
+    mfaPending: { type: Boolean, default: false },
   },
   {
     timestamps: true,

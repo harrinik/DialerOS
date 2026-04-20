@@ -30,7 +30,7 @@ export const POST = withAuth(async (req: NextRequest, user: JwtPayload) => {
     ownerId: user.sub,
     url,
     events,
-    ...(secret && { secret }),
+    ...(secret ? { secret } : {}),
     isActive: true,
   });
 

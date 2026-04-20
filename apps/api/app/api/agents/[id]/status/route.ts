@@ -27,7 +27,7 @@ export const POST = withAuth(async (req: NextRequest, user: JwtPayload, { params
 
   // If going to wrapup, we should clear the current call
   if (newStatus === 'wrapup' || newStatus === 'paused' || newStatus === 'training') {
-    agent.currentCallId = undefined;
+    agent.currentCallId = null;
   }
 
   await agent.save();

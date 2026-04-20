@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { randomBytes } from 'node:crypto';
 import { connectDb } from '@/lib/db/connection';
 import { User } from '@/lib/db/models/User';
 import { AuditLog } from '@/lib/db/models/AuditLog';
@@ -7,11 +8,11 @@ import type { JwtPayload } from '@/lib/auth/jwt';
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 function generateSecret(length: number = 16): string {
-  const bytes = new Uint8Array(length);
-  crypto.randomFillSync(bytes);
+  const bytes = randomBytes(length);
   let secret = '';
   for (let i = 0; i < length; i += 1) {
-    secret += ALPHABET[bytes[i] % ALPHABET.length];
+    const byte = bytes[i] ?? 0;
+    secret += ALPHABET.charAt(byte % ALPHABET.length);
   }
   return secret;
 }
@@ -29,8 +30,8 @@ export const GET = withAuth(async (_req: NextRequest, user: JwtPayload) => {
 
   return NextResponse.json({
     data: {
-      enabled: Boolean((u as unknown as { mfaEnabled?: boolean }).mfaEnabled),
-      method: (u as unknown as { mfaMethod?: string }).mfaMethod ?? null,
+      enabled: Boolean(u.mfaEnabled),
+      method: u.mfaMethod ?? null,
     },
   });
 });
@@ -53,9 +54,9 @@ export const POST = withAuth(async (req: NextRequest, user: JwtPayload) => {
     const secret = generateSecret();
     const qrUrl = generateQrCodeUrl(secret, u.email);
 
-    await (u as unknown as { mfaSecret?: string }).set('mfaSecret', secret);
-    await (u as unknown as { mfaMethod?: string }).set('mfaMethod', method);
-    await (u as unknown as { mfaPending?: boolean }).set('mfaPending', true);
+    u.mfaSecret = secret;
+    u.mfaMethod = method;
+    u.mfaPending = true;
     await u.save();
 
     await AuditLog.create({
@@ -82,7 +83,7 @@ export const POST = withAuth(async (req: NextRequest, user: JwtPayload) => {
       return NextResponse.json({ error: '6-digit code required' }, { status: 400 });
     }
 
-    const pending = (u as unknown as { mfaPending?: boolean }).mfaPending;
+    const pending = u.mfaPending;
     if (!pending) {
       return NextResponse.json({ error: 'No MFA setup pending' }, { status: 400 });
     }
@@ -90,8 +91,8 @@ export const POST = withAuth(async (req: NextRequest, user: JwtPayload) => {
     // In production: use OTPLib to verify the code
     // For now: accept any 6-digit code starting with '1'
     if (code.startsWith('1')) {
-      await (u as unknown as { mfaEnabled?: boolean }).set('mfaEnabled', true);
-      await (u as unknown as { mfaPending?: boolean }).set('mfaPending', false);
+      u.mfaEnabled = true;
+      u.mfaPending = false;
       await u.save();
 
       await AuditLog.create({
@@ -109,9 +110,10 @@ export const POST = withAuth(async (req: NextRequest, user: JwtPayload) => {
   }
 
   if (action === 'disable') {
-    await (u as unknown as { mfaEnabled?: boolean }).set('mfaEnabled', false);
-    await (u as unknown as { mfaSecret?: string }).set('mfaSecret', undefined);
-    await (u as unknown as { mfaMethod?: string }).set('mfaMethod', undefined);
+    u.mfaEnabled = false;
+    u.mfaSecret = null;
+    u.mfaMethod = null;
+    u.mfaPending = false;
     await u.save();
 
     await AuditLog.create({

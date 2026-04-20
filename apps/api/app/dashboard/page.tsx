@@ -67,7 +67,7 @@ export default function DashboardPage() {
         campaignId: e.campaignId,
         status: 'dialing',
         startedAt: e.timestamp,
-        ...(e.phone !== undefined && { phone: e.phone }),
+        ...(e.phone !== undefined ? { phone: e.phone } : {}),
       };
       setActiveCalls((p) => [...p, call]);
       addEvent(e);

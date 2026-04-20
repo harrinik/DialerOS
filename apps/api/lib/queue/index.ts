@@ -50,8 +50,8 @@ export async function enqueueDialJob(
 ): Promise<string | undefined> {
   const queue = getDialQueue();
   const job = await queue.add(JOB_NAMES.ORIGINATE_CALL, payload, {
-    ...(options?.delay !== undefined    && { delay:    options.delay }),
-    ...(options?.priority !== undefined && { priority: options.priority }),
+    ...(options?.delay !== undefined ? { delay: options.delay } : {}),
+    ...(options?.priority !== undefined ? { priority: options.priority } : {}),
     jobId: `dial-${payload.contactId}-${payload.attempt}`,
   });
   return job.id;

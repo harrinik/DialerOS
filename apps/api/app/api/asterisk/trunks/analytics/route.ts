@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import type { PipelineStage } from 'mongoose';
 import { connectDb } from '@/lib/db/connection';
 import { CdrLog } from '@/lib/db/models/CdrLog';
 import { withAuth } from '@/lib/auth/rbac';
@@ -21,7 +22,7 @@ export const GET = withAuth(async (req: NextRequest, _user: JwtPayload) => {
     match['dst'] = { $regex: `^${trunkPrefix}` };
   }
 
-  const pipeline = [
+  const pipeline: PipelineStage[] = [
     { $match: match },
     {
       $group: {
@@ -44,7 +45,7 @@ export const GET = withAuth(async (req: NextRequest, _user: JwtPayload) => {
         acd: { $cond: [{ $eq: ['$answeredCalls', 0] }, 0, { $divide: ['$totalDuration', '$answeredCalls'] }] },
       },
     },
-    { $sort: { totalCalls: -1 } },
+    { $sort: { totalCalls: -1 as const } },
   ];
 
   const results = await CdrLog.aggregate(pipeline);
