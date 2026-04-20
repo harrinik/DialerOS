@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { pjsipPut } from '@/lib/asterisk/ari-client';
+import { type ConfSection, upsertPjsipSections } from '@/lib/asterisk/pjsip-endpoints';
 import { withUser } from '@/lib/auth/rbac';
 import type { JwtPayload } from '@/lib/auth/jwt';
 
@@ -54,57 +54,91 @@ export const POST = withUser(async (req: NextRequest, _user: JwtPayload) => {
   } = body;
 
   const id = `trunk-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+  const authId = `auth-${id}`;
+  const regId = `reg-${id}`;
+  const identifyId = `identify-${id}`;
 
   try {
+    const sections: ConfSection[] = [];
+
     // Auth (needed for registration trunks)
     if (username && password) {
-      await pjsipPut('res_pjsip', 'auth', `auth-${id}`, [
-        { attribute: 'auth_type', value: 'userpass' },
-        { attribute: 'username',  value: username },
-        { attribute: 'password',  value: password },
-        { attribute: 'realm',     value: fromDomain ?? host },
-      ]);
+      sections.push({
+        id: authId,
+        type: 'auth',
+        attrs: {
+          auth_type: ['userpass'],
+          username: [username],
+          password: [password],
+          realm: [fromDomain ?? host],
+        },
+      });
     }
 
     // AOR pointing at the provider
-    await pjsipPut('res_pjsip', 'aor', id, [
-      { attribute: 'contact',          value: `sip:${host}:${port}` },
-      { attribute: 'qualify_frequency',value: qualify ? '30' : '0' },
-    ]);
+    sections.push({
+      id,
+      type: 'aor',
+      attrs: {
+        contact: [`sip:${host}:${port}`],
+        qualify_frequency: [qualify ? '30' : '0'],
+      },
+    });
 
     // Endpoint
-    const epFields: Array<{ attribute: string; value: string }> = [
-      { attribute: 'transport',    value: transport },
-      { attribute: 'aors',         value: id },
-      { attribute: 'context',      value: context },
-      { attribute: 'disallow',     value: 'all' },
-      { attribute: 'allow',        value: codecs.join(',') },
-      { attribute: 'dtmf_mode',    value: 'rfc4733' },
-      { attribute: 'direct_media', value: 'no' },
-      { attribute: 'rtp_symmetric', value: 'yes' },
-      { attribute: 'force_rport',  value: 'yes' },
-      { attribute: 'rewrite_contact', value: 'yes' },
-      { attribute: 'from_user',    value: fromUser ?? username ?? '' },
-      { attribute: 'from_domain',  value: fromDomain ?? host },
-      { attribute: 'send_rpid',    value: 'yes' },
-    ];
-    if (username) epFields.push({ attribute: 'outbound_auth', value: `auth-${id}` });
-    if (outboundProxy) epFields.push({ attribute: 'outbound_proxy', value: `sip:${outboundProxy}` });
-    if (maxChannels) epFields.push({ attribute: 'max_audio_streams', value: String(maxChannels) });
-    await pjsipPut('res_pjsip', 'endpoint', id, epFields);
+    const endpointAttrs: Record<string, string[]> = {
+      transport: [transport],
+      aors: [id],
+      context: [context],
+      disallow: ['all'],
+      allow: [codecs.join(',')],
+      dtmf_mode: ['rfc4733'],
+      direct_media: ['no'],
+      rtp_symmetric: ['yes'],
+      force_rport: ['yes'],
+      rewrite_contact: ['yes'],
+      from_user: [fromUser ?? username ?? ''],
+      from_domain: [fromDomain ?? host],
+      send_rpid: ['yes'],
+    };
+    if (username) endpointAttrs['outbound_auth'] = [authId];
+    if (outboundProxy) endpointAttrs['outbound_proxy'] = [`sip:${outboundProxy}`];
+    if (maxChannels) endpointAttrs['max_audio_streams'] = [String(maxChannels)];
+    sections.push({
+      id,
+      type: 'endpoint',
+      attrs: endpointAttrs,
+    });
 
     // Registration (outbound registration with provider)
     if (type === 'registration' && username && password) {
-      await pjsipPut('res_pjsip', 'registration', `reg-${id}`, [
-        { attribute: 'transport',   value: transport },
-        { attribute: 'outbound_auth', value: `auth-${id}` },
-        { attribute: 'server_uri',  value: `sip:${host}:${port}` },
-        { attribute: 'client_uri',  value: `sip:${username}@${host}` },
-        { attribute: 'contact_user',value: username },
-        { attribute: 'retry_interval', value: '60' },
-        { attribute: 'expiration',  value: '3600' },
-      ]);
+      sections.push({
+        id: regId,
+        type: 'registration',
+        attrs: {
+          transport: [transport],
+          outbound_auth: [authId],
+          server_uri: [`sip:${host}:${port}`],
+          client_uri: [`sip:${username}@${host}`],
+          contact_user: [username],
+          retry_interval: ['60'],
+          expiration: ['3600'],
+        },
+      });
     }
+
+    if (type === 'ip_auth') {
+      sections.push({
+        id: identifyId,
+        type: 'identify',
+        attrs: {
+          endpoint: [id],
+          match: [host],
+        },
+      });
+    }
+
+    await upsertPjsipSections(sections);
 
     return NextResponse.json({ ok: true, id });
   } catch (err) {

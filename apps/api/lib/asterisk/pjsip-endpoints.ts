@@ -99,6 +99,41 @@ async function reloadPjsip(): Promise<void> {
   }
 }
 
+export async function upsertPjsipSections(sectionsToUpsert: ConfSection[]): Promise<void> {
+  const ids = new Set(
+    sectionsToUpsert
+      .map((section) => sanitizeEndpointId(section.id))
+      .filter(Boolean),
+  );
+  if (ids.size === 0) {
+    throw new Error('No valid PJSIP sections to upsert');
+  }
+
+  const existing = await readPjsipSections();
+  const filtered = existing.filter((section) => !ids.has(section.id));
+  await writePjsipSections([...filtered, ...sectionsToUpsert]);
+  await reloadPjsip();
+}
+
+export async function deletePjsipSections(idsToDelete: string[]): Promise<boolean> {
+  const ids = new Set(
+    idsToDelete
+      .map((id) => sanitizeEndpointId(id))
+      .filter(Boolean),
+  );
+  if (ids.size === 0) return false;
+
+  const existing = await readPjsipSections();
+  const filtered = existing.filter((section) => !ids.has(section.id));
+  if (filtered.length === existing.length) {
+    return false;
+  }
+
+  await writePjsipSections(filtered);
+  await reloadPjsip();
+  return true;
+}
+
 export async function upsertPjsipEndpoint(input: UpsertEndpointInput): Promise<{ extension: string; password: string }> {
   const extension = sanitizeEndpointId(input.extension);
   if (!extension) {
@@ -153,10 +188,7 @@ export async function upsertPjsipEndpoint(input: UpsertEndpointInput): Promise<{
     },
   };
 
-  const existing = await readPjsipSections();
-  const filtered = existing.filter((section) => section.id !== extension);
-  await writePjsipSections([...filtered, authSection, aorSection, endpointSection]);
-  await reloadPjsip();
+  await upsertPjsipSections([authSection, aorSection, endpointSection]);
 
   return { extension, password };
 }
@@ -165,13 +197,5 @@ export async function deletePjsipEndpoint(extension: string): Promise<boolean> {
   const id = sanitizeEndpointId(extension);
   if (!id) return false;
 
-  const existing = await readPjsipSections();
-  const filtered = existing.filter((section) => section.id !== id);
-  if (filtered.length === existing.length) {
-    return false;
-  }
-
-  await writePjsipSections(filtered);
-  await reloadPjsip();
-  return true;
+  return deletePjsipSections([id]);
 }

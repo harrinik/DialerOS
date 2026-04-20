@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { pjsipDelete } from '@/lib/asterisk/ari-client';
+import { deletePjsipSections } from '@/lib/asterisk/pjsip-endpoints';
 import { getAmiClient } from '@/lib/asterisk/ami-client';
 import { withUser } from '@/lib/auth/rbac';
 import type { JwtPayload } from '@/lib/auth/jwt';
@@ -9,12 +9,7 @@ type Params = { params: { id: string } };
 export const DELETE = withUser(async (_req: NextRequest, _user: JwtPayload, { params }: Params) => {
   const id = params.id.startsWith('trunk-') ? params.id : `trunk-${params.id}`;
   try {
-    await Promise.all([
-      pjsipDelete('res_pjsip', 'endpoint', id),
-      pjsipDelete('res_pjsip', 'aor', id),
-      pjsipDelete('res_pjsip', 'auth', `auth-${id}`).catch(() => null),
-      pjsipDelete('res_pjsip', 'registration', `reg-${id}`).catch(() => null),
-    ]);
+    await deletePjsipSections([id, `auth-${id}`, `reg-${id}`, `identify-${id}`]);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ ok: false, error: String(err) }, { status: 502 });
