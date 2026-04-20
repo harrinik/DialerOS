@@ -19,6 +19,10 @@ function getRedis(): Redis {
   return redis;
 }
 
+export function getRedisClient(): Redis {
+  return getRedis();
+}
+
 // Queue instances (cached)
 let dialQueue: Queue<DialJobPayload> | null = null;
 
@@ -96,4 +100,29 @@ export async function getQueueMetrics(): Promise<{
     failed: number;
     delayed: number;
   };
+}
+
+export async function replayFailedDialJobs(limit = 100): Promise<{
+  requested: number;
+  replayed: number;
+  failedIds: string[];
+}> {
+  const queue = getDialQueue();
+  const safeLimit = Math.min(Math.max(limit, 1), 500);
+  const failedJobs = await queue.getFailed(0, safeLimit - 1);
+  const failedIds: string[] = [];
+  let replayed = 0;
+
+  await Promise.all(
+    failedJobs.map(async (job) => {
+      try {
+        await job.retry();
+        replayed += 1;
+      } catch {
+        failedIds.push(String(job.id));
+      }
+    }),
+  );
+
+  return { requested: safeLimit, replayed, failedIds };
 }

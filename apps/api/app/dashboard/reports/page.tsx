@@ -18,6 +18,30 @@ interface ReportData {
   queueMetrics: { waiting: number; active: number; failed: number; completed: number };
 }
 
+interface PacingMetricsResponse {
+  generatedAt: string;
+  campaigns: Array<{
+    campaignId: string;
+    name: string;
+    status: string;
+    abandonProxyRate: number | null;
+    lastRate: {
+      targetRate?: number;
+      predictedRate?: number;
+      availableAgents?: number;
+      answerRate?: number;
+      avgHandleTimeSec?: number;
+    } | null;
+    governor: { reason?: string } | null;
+  }>;
+  workers: Array<{ key: string; pid?: number; ts?: string }>;
+}
+
+interface AlertsResponse {
+  overall: 'ok' | 'warn' | 'critical';
+  alerts: Array<{ key: string; level: 'ok' | 'warn' | 'critical'; message: string; value?: number | string }>;
+}
+
 const DISP_COLORS: Record<string, string> = {
   answered: 'bg-success', machine: 'bg-warning', busy: 'bg-primary',
   no_answer: 'bg-muted-foreground', failed: 'bg-destructive', cancelled: 'bg-muted-foreground',
@@ -29,6 +53,8 @@ const DISP_TEXT: Record<string, string> = {
 
 export default function ReportsPage() {
   const [data, setData] = useState<ReportData | null>(null);
+  const [pacing, setPacing] = useState<PacingMetricsResponse | null>(null);
+  const [alerts, setAlerts] = useState<AlertsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [granularity, setGranularity] = useState<'hour' | 'day' | 'week'>('day');
 
@@ -42,6 +68,17 @@ export default function ReportsPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [granularity]);
+
+  useEffect(() => {
+    fetch('/api/metrics/pacing', { headers: { Authorization: `Bearer ${token()}` } })
+      .then((r) => r.json() as Promise<PacingMetricsResponse>)
+      .then(setPacing)
+      .catch(() => setPacing(null));
+    fetch('/api/metrics/alerts', { headers: { Authorization: `Bearer ${token()}` } })
+      .then((r) => r.json() as Promise<AlertsResponse>)
+      .then(setAlerts)
+      .catch(() => setAlerts(null));
+  }, []);
 
   const totalCalls = (data?.summary ?? []).reduce((s, x) => s + x.count, 0) ?? 0;
   const answeredCount = (data?.summary ?? []).find((x) => x._id === 'answered')?.count ?? 0;
@@ -132,6 +169,61 @@ export default function ReportsPage() {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Pacing & compliance */}
+            <Card>
+              <CardHeader><CardTitle className="text-base">Pacing & Compliance</CardTitle></CardHeader>
+              <Separator />
+              <CardContent className="pt-4 space-y-3">
+                {alerts && (
+                  <div className={cn(
+                    'rounded-md border px-3 py-2 text-xs',
+                    alerts.overall === 'critical' && 'border-destructive/50 bg-destructive/10 text-destructive',
+                    alerts.overall === 'warn' && 'border-warning/40 bg-warning/10 text-warning',
+                    alerts.overall === 'ok' && 'border-success/40 bg-success/10 text-success',
+                  )}>
+                    System alert status: {alerts.overall.toUpperCase()}
+                  </div>
+                )}
+                {pacing?.campaigns?.length ? pacing.campaigns.slice(0, 6).map((campaign) => (
+                  <div key={campaign.campaignId} className="rounded-md border border-border/60 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-medium">{campaign.name}</p>
+                      {campaign.governor ? (
+                        <Badge variant="destructive">Throttled</Badge>
+                      ) : (
+                        <Badge variant="running">Normal</Badge>
+                      )}
+                    </div>
+                    <div className="mt-1 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                      <span>Rate: {campaign.lastRate?.targetRate?.toFixed(2) ?? '—'}/s</span>
+                      <span>Agents: {campaign.lastRate?.availableAgents ?? '—'}</span>
+                      <span>Answer: {campaign.lastRate?.answerRate != null ? `${(campaign.lastRate.answerRate * 100).toFixed(1)}%` : '—'}</span>
+                      <span>Abandon: {campaign.abandonProxyRate != null ? `${(campaign.abandonProxyRate * 100).toFixed(2)}%` : '—'}</span>
+                    </div>
+                  </div>
+                )) : (
+                  <p className="py-4 text-sm text-muted-foreground">No pacing metrics available yet.</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Live workers reporting: {pacing?.workers?.length ?? 0}
+                </p>
+                {alerts?.alerts?.length ? (
+                  <div className="space-y-1">
+                    {alerts.alerts.map((alert) => (
+                      <p key={alert.key} className={cn(
+                        'text-xs',
+                        alert.level === 'critical' && 'text-destructive',
+                        alert.level === 'warn' && 'text-warning',
+                        alert.level === 'ok' && 'text-muted-foreground',
+                      )}>
+                        {alert.message}: {alert.value ?? 'n/a'}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </div>

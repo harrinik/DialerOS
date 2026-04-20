@@ -9,12 +9,15 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Phone, CheckCircle2, Play, Pause, ArrowLeft } from 'lucide-react';
+import { Phone, CheckCircle2, Play, Pause, ArrowLeft, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface Campaign {
   _id: string; name: string; status: string; callerIdName: string; callerIdNumber: string;
   sipTrunk: string; concurrency: number; amdAction: string; maxRetries: number;
+  timezone?: string; startTime?: string; endTime?: string; blackoutDates?: string[];
   stats: { total: number; pending: number; answered: number; machines: number; failed: number; noAnswer: number; busy: number };
   ivrFlowId?: { _id: string; name: string; isDeployed: boolean };
   createdAt: string; updatedAt: string;
@@ -41,6 +44,9 @@ export default function CampaignDetailPage() {
   const [recentCalls, setRecentCalls] = useState<CallLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
+  const [blackoutInput, setBlackoutInput] = useState('');
+  const [savingCalendar, setSavingCalendar] = useState(false);
+  const [calendarForm, setCalendarForm] = useState({ timezone: 'UTC', startTime: '', endTime: '' });
 
   const token = () => localStorage.getItem('dialer_access_token') ?? '';
 
@@ -48,6 +54,12 @@ export default function CampaignDetailPage() {
     const r = await fetch(`/api/campaigns/${id}`, { headers: { Authorization: `Bearer ${token()}` } });
     const d = await r.json() as { data: Campaign };
     setCampaign(d.data);
+    setBlackoutInput((d.data.blackoutDates ?? []).join(', '));
+    setCalendarForm({
+      timezone: d.data.timezone ?? 'UTC',
+      startTime: d.data.startTime ?? '',
+      endTime: d.data.endTime ?? '',
+    });
   };
 
   useEffect(() => {
@@ -67,6 +79,33 @@ export default function CampaignDetailPage() {
       await fetch(`/api/campaigns/${id}/${action}`, { method: 'POST', headers: { Authorization: `Bearer ${token()}` } });
       await fetchCampaign();
     } finally { setActionPending(false); }
+  };
+
+  const saveCalendar = async () => {
+    if (!campaign) return;
+    setSavingCalendar(true);
+    try {
+      const blackoutDates = blackoutInput
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const response = await fetch(`/api/campaigns/${id}/calendar`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          timezone: calendarForm.timezone,
+          startTime: calendarForm.startTime || null,
+          endTime: calendarForm.endTime || null,
+          blackoutDates,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to save calendar settings');
+      }
+      await fetchCampaign();
+    } finally {
+      setSavingCalendar(false);
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center py-32 text-muted-foreground text-sm">Loading campaign...</div>;
@@ -174,6 +213,54 @@ export default function CampaignDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-primary" /> Blackout Calendar
+          </CardTitle>
+        </CardHeader>
+        <Separator />
+        <CardContent className="pt-4 space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label>Timezone</Label>
+              <Input
+                value={calendarForm.timezone}
+                onChange={(e) => setCalendarForm((prev) => ({ ...prev, timezone: e.target.value }))}
+                placeholder="UTC"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Daily Start</Label>
+              <Input
+                type="time"
+                value={calendarForm.startTime}
+                onChange={(e) => setCalendarForm((prev) => ({ ...prev, startTime: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Daily End</Label>
+              <Input
+                type="time"
+                value={calendarForm.endTime}
+                onChange={(e) => setCalendarForm((prev) => ({ ...prev, endTime: e.target.value }))}
+              />
+            </div>
+          </div>
+          <Input
+            value={blackoutInput}
+            onChange={(e) => setBlackoutInput(e.target.value)}
+            placeholder="2026-12-25, 2026-01-01"
+          />
+          <p className="text-xs text-muted-foreground">
+            Comma-separated dates in YYYY-MM-DD. Calls are blocked for the full date in campaign timezone.
+          </p>
+          <Button size="sm" variant="secondary" disabled={savingCalendar} onClick={() => void saveCalendar()}>
+            {savingCalendar ? 'Saving...' : 'Save Calendar'}
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Recent calls */}
       <Card>

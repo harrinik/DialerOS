@@ -32,6 +32,7 @@ interface FormState {
   timezone: string;
   startTime: string;
   endTime: string;
+  blackoutDates: string;
 }
 
 const DEFAULTS: FormState = {
@@ -47,6 +48,7 @@ const DEFAULTS: FormState = {
   timezone: 'UTC',
   startTime: '',
   endTime: '',
+  blackoutDates: '',
 };
 
 export default function NewCampaignPage() {
@@ -83,6 +85,11 @@ export default function NewCampaignPage() {
       if (form.description.trim()) payload.description = form.description.trim();
       if (form.startTime)          payload.startTime   = form.startTime;
       if (form.endTime)            payload.endTime     = form.endTime;
+      const blackoutDates = form.blackoutDates
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (blackoutDates.length) payload.blackoutDates = blackoutDates;
 
       const r = await fetch('/api/campaigns', {
         method: 'POST',
@@ -303,6 +310,18 @@ export default function NewCampaignPage() {
             <p className="text-xs text-muted-foreground">
               Leave blank for no time restriction. Dialing outside these hours will be paused automatically.
             </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="camp-blackout">Blackout Dates (optional)</Label>
+              <Input
+                id="camp-blackout"
+                value={form.blackoutDates}
+                onChange={e => set('blackoutDates', e.target.value)}
+                placeholder="2026-12-25, 2026-01-01"
+              />
+              <p className="text-xs text-muted-foreground">
+                Comma-separated local dates (YYYY-MM-DD). Calls are blocked all day in campaign timezone.
+              </p>
+            </div>
           </CardContent>
         </Card>
 

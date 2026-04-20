@@ -112,6 +112,7 @@ export interface Campaign {
   timezone: string;
   startTime?: string; // HH:MM
   endTime?: string;   // HH:MM
+  blackoutDates: string[]; // YYYY-MM-DD in campaign timezone
   stats: CampaignStats;
   callerIdName: string;
   callerIdNumber: string;

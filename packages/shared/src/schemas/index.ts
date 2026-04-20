@@ -61,6 +61,9 @@ export const CreateCampaignSchema = z.object({
     .string()
     .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Must be HH:MM format')
     .optional(),
+  blackoutDates: z
+    .array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD'))
+    .default([]),
   callerIdName: z.string().min(1).max(100),
   callerIdNumber: z
     .string()
