@@ -45,7 +45,7 @@ function ariDelete(path: string): Promise<void> {
 }
 
 function ariPut<T = unknown>(path: string, body?: unknown): Promise<T | null> {
-  return ariRequest('PUT', path, body).then((r) => r.status === 204 ? null : (r.json() as Promise<T>));
+  return ariRequest('PUT', path, body).then((r) => (r.status === 204 ? null : (r.json() as Promise<T>)));
 }
 
 interface PjsipEndpoint {

@@ -340,7 +340,8 @@ export default function CampaignDetailPage() {
           {recentCalls.length === 0 ? (
             <p className="text-center text-muted-foreground py-10 text-sm">No calls recorded yet</p>
           ) : (
-            <div className="divide-y divide-border/60">
+            <>
+              <div className="divide-y divide-border/60">
               {recentCalls.map((c) => {
                 const expanded = expandedCalls[c._id] ?? false;
                 const lastError = getLastErrorTrace(c);
@@ -415,7 +416,7 @@ export default function CampaignDetailPage() {
                               <div key={`${c._id}-${entry.at}-${index}`} className="flex gap-3">
                                 <div className="flex flex-col items-center">
                                   <CircleDot className={cn('mt-0.5 h-4 w-4', TRACE_LEVEL_STYLES[entry.level])} />
-                                  {index < c.trace.length - 1 && <div className="mt-1 h-full w-px bg-border" />}
+                                  {index < (c.trace?.length ?? 0) - 1 && <div className="mt-1 h-full w-px bg-border" />}
                                 </div>
                                 <div className="min-w-0 flex-1 pb-2">
                                   <div className="flex flex-wrap items-center gap-2">
@@ -470,6 +471,7 @@ export default function CampaignDetailPage() {
                 ))}
               </TableBody>
             </Table>)}
+            </>
           )}
         </CardContent>
       </Card>

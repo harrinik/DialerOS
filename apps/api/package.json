@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "node --env-file=../../.env node_modules/next/dist/bin/next dev --port 3000",
-    "build": "node node_modules/next/dist/bin/next build",
-    "start": "node --env-file=../../.env node_modules/next/dist/bin/next start --port 3000",
-    "lint": "node node_modules/next/dist/bin/next lint",
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "lint": "next lint",
     "clean": "rm -rf .next"
   },
   "dependencies": {
