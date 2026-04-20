@@ -3,16 +3,30 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { Zap, Mail, Lock, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
+import { Zap, Mail, Lock, Eye, EyeOff, AlertCircle, Loader2, QrCode } from 'lucide-react';
+import { useEffect } from 'react';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginWithQr } = useAuth();
 
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [showPwd,  setShowPwd]  = useState(false);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState<string | null>(null);
+  const [qrToken,  setQrToken]  = useState('');
+
+  async function performQrLogin(token: string) {
+    setError(null);
+    setLoading(true);
+    try {
+      await loginWithQr(token);
+    } catch (err) {
+      setError((err as Error).message ?? 'QR login failed');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -26,6 +40,21 @@ export default function LoginPage() {
       setLoading(false);
     }
   }
+
+  async function handleQrSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!qrToken.trim()) return;
+    await performQrLogin(qrToken.trim());
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const token = new URLSearchParams(window.location.search).get('qrToken') ?? '';
+    if (!token) return;
+    setQrToken(token);
+    void performQrLogin(token);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loginWithQr]);
 
   return (
     <div className="auth-page">
@@ -114,6 +143,29 @@ export default function LoginPage() {
             ) : 'Sign In'}
           </button>
         </form>
+
+        <div className="my-4 border-t border-border pt-4">
+          <p className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
+            <QrCode className="h-3.5 w-3.5" /> Agent QR Login
+          </p>
+          <form onSubmit={(e) => { void handleQrSubmit(e); }} className="auth-form">
+            <div className="auth-field">
+              <label htmlFor="qr-token" className="auth-label">QR token</label>
+              <input
+                id="qr-token"
+                value={qrToken}
+                onChange={(e) => setQrToken(e.target.value)}
+                placeholder="Paste token or open scan link"
+                className="auth-input"
+              />
+            </div>
+            <button type="submit" disabled={loading || !qrToken.trim()} className="auth-btn-primary">
+              {loading ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying…</>
+              ) : 'Login with QR'}
+            </button>
+          </form>
+        </div>
 
         <p className="auth-footer-text">
           Don&apos;t have an account?{' '}

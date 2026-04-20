@@ -1,9 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
-import crypto from 'crypto';
-import { getAmiClient } from '@/lib/asterisk/ami-client';
 import { ariGet } from '@/lib/asterisk/ari-client';
+import { deletePjsipEndpoint, upsertPjsipEndpoint } from '@/lib/asterisk/pjsip-endpoints';
 import { withUser } from '@/lib/auth/rbac';
 import type { JwtPayload } from '@/lib/auth/jwt';
 
@@ -21,90 +18,6 @@ import type { JwtPayload } from '@/lib/auth/jwt';
  *   chown asterisk:asterisk /etc/asterisk/pjsip_endpoints.conf
  *   asterisk -rx "module reload res_pjsip.so"
  */
-
-const CONF_DIR        = process.env.ASTERISK_CONF_DIR ?? '/etc/asterisk';
-const ENDPOINTS_FILE  = path.join(CONF_DIR, 'pjsip_endpoints.conf');
-
-// ── Config parser ─────────────────────────────────────────────────────────────
-
-interface ConfSection {
-  id:    string;
-  type:  string;
-  attrs: Record<string, string[]>;
-}
-
-function parseConf(content: string): ConfSection[] {
-  const sections: ConfSection[] = [];
-  let current: ConfSection | null = null;
-
-  for (const rawLine of content.split('\n')) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith(';')) continue;
-
-    const sectionMatch = /^\[([^\]]+)\]/.exec(line);
-    if (sectionMatch?.[1]) {
-      if (current) sections.push(current);
-      current = { id: sectionMatch[1], type: '', attrs: {} };
-      continue;
-    }
-    if (!current) continue;
-    const kv = /^([^=]+)=(.*)$/.exec(line);
-    if (!kv) continue;
-    const key = (kv[1] ?? '').trim();
-    const val = (kv[2] ?? '').trim();
-    if (!key) continue;
-    if (key === 'type') { current.type = val; }
-    else { (current.attrs[key] ??= []).push(val); }
-  }
-  if (current) sections.push(current);
-  return sections;
-}
-
-function renderSection(s: ConfSection): string {
-  const lines = [`[${s.id}]`, `type=${s.type}`];
-  for (const [k, vals] of Object.entries(s.attrs)) {
-    for (const v of vals) lines.push(`${k}=${v}`);
-  }
-  return lines.join('\n');
-}
-
-function renderConf(sections: ConfSection[]): string {
-  const header = [
-    '; ============================================================',
-    '; DialerOS — PJSIP Endpoints',
-    '; Auto-managed. Do not edit manually.',
-    `; Last updated: ${new Date().toISOString()}`,
-    '; ============================================================',
-    '',
-  ].join('\n');
-  return header + sections.map(renderSection).join('\n\n') + '\n';
-}
-
-// ── File helpers ─────────────────────────────────────────────────────────────
-
-async function readEndpoints(): Promise<ConfSection[]> {
-  try {
-    const content = await fs.readFile(ENDPOINTS_FILE, 'utf-8');
-    return parseConf(content);
-  } catch {
-    return [];
-  }
-}
-
-async function writeEndpoints(sections: ConfSection[]): Promise<void> {
-  await fs.writeFile(ENDPOINTS_FILE, renderConf(sections), 'utf-8');
-  // NOTE: pjsip.conf must already contain:
-  //   #include "pjsip_endpoints.conf"
-  // This is added by install_asterisk.sh and the setup one-time command.
-  // The API never modifies pjsip.conf directly.
-}
-
-async function reloadPjsip(): Promise<void> {
-  try {
-    const ami = await getAmiClient();
-    await ami.command('module reload res_pjsip.so');
-  } catch { /* non-fatal — config is saved even if reload fails */ }
-}
 
 // ── GET /api/asterisk/endpoints ───────────────────────────────────────────────
 
@@ -139,7 +52,7 @@ export const POST = withUser(async (req: NextRequest, _user: JwtPayload) => {
   const {
     extension,
     displayName,
-    password = crypto.randomBytes(12).toString('hex'),
+    password,
     transport = 'transport-udp',
     codecs = ['ulaw', 'alaw', 'g722'],
     maxContacts = 1,
@@ -151,57 +64,18 @@ export const POST = withUser(async (req: NextRequest, _user: JwtPayload) => {
     return NextResponse.json({ ok: false, error: 'extension is required' }, { status: 400 });
   }
 
-  const id = extension.replace(/[^a-z0-9_-]/gi, '');
-
-  // Build the three sections: auth, aor, endpoint
-  const authSection: ConfSection = {
-    id, type: 'auth',
-    attrs: {
-      auth_type: ['userpass'],
-      username:  [id],
-      password:  [password],
-    },
-  };
-
-  const aorSection: ConfSection = {
-    id, type: 'aor',
-    attrs: {
-      max_contacts:      [String(maxContacts)],
-      remove_existing:   ['yes'],
-      qualify_frequency: ['30'],
-      qualify_timeout:   ['3.0'],
-    },
-  };
-
-  const endpointSection: ConfSection = {
-    id, type: 'endpoint',
-    attrs: {
-      transport:             [transport],
-      auth:                  [id],
-      aors:                  [id],
-      callerid:              [`"${displayName}" <${id}>`],
-      context:               ['agents'],
-      disallow:              ['all'],      // disallow must come before allow
-      allow:                 [codecs.join(',')],
-      dtmf_mode:             [dtmfMode],
-      direct_media:          [directMedia ? 'yes' : 'no'],
-      rtp_symmetric:         ['yes'],
-      force_rport:           ['yes'],
-      rewrite_contact:       ['yes'],
-      send_rpid:             ['yes'],
-      trust_id_inbound:      ['yes'],
-      device_state_busy_at:  [String(maxContacts)],
-    },
-  };
-
   try {
-    // Read existing, remove old sections for this ID, append new ones
-    const existing = await readEndpoints();
-    const filtered = existing.filter(s => s.id !== id);
-    await writeEndpoints([...filtered, authSection, aorSection, endpointSection]);
-    await reloadPjsip();
-
-    return NextResponse.json({ ok: true, extension: id, password });
+    const created = await upsertPjsipEndpoint({
+      extension,
+      displayName,
+      transport,
+      codecs,
+      maxContacts,
+      dtmfMode,
+      directMedia,
+      ...(password ? { password } : {}),
+    });
+    return NextResponse.json({ ok: true, extension: created.extension, password: created.password });
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: String(err) },
@@ -218,10 +92,7 @@ export const DELETE = withUser(async (req: NextRequest, _user: JwtPayload) => {
   if (!id) return NextResponse.json({ ok: false, error: 'id query param required' }, { status: 400 });
 
   try {
-    const existing = await readEndpoints();
-    const filtered = existing.filter(s => s.id !== id);
-    await writeEndpoints(filtered);
-    await reloadPjsip();
+    await deletePjsipEndpoint(id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });

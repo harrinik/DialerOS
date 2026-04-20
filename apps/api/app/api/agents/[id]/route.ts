@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { connectDb } from '@/lib/db/connection';
 import { Agent } from '@/lib/db/models/Agent';
 import { AuditLog } from '@/lib/db/models/AuditLog';
+import { User } from '@/lib/db/models/User';
+import { AgentQrLoginToken } from '@/lib/db/models/AgentQrLoginToken';
+import { deletePjsipEndpoint } from '@/lib/asterisk/pjsip-endpoints';
 import { withAuth } from '@/lib/auth/rbac';
 import type { JwtPayload } from '@/lib/auth/jwt';
 
@@ -46,6 +49,10 @@ export const DELETE = withAuth(
     await connectDb();
     const agent = await Agent.findById(params.id);
     if (!agent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const extensionDeleted = await deletePjsipEndpoint(agent.extension);
+
+    await User.deleteOne({ _id: agent.userId, role: 'agent' });
+    await AgentQrLoginToken.deleteMany({ agentId: agent._id });
     await agent.deleteOne();
 
     await AuditLog.create({
@@ -53,6 +60,7 @@ export const DELETE = withAuth(
       action: 'agent.delete',
       resource: 'Agent',
       resourceId: params.id,
+      metadata: { extension: agent.extension, userId: String(agent.userId), extensionDeleted },
       ip: req.headers.get('x-forwarded-for') ?? '0.0.0.0',
     });
 

@@ -9,7 +9,7 @@ interface AuthUser {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'agent' | 'supervisor';
+  role: 'admin' | 'agent' | 'user';
 }
 
 interface AuthContextValue {
@@ -17,6 +17,7 @@ interface AuthContextValue {
   accessToken: string | null;
   loading: boolean;
   login:    (email: string, password: string) => Promise<void>;
+  loginWithQr: (token: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout:   () => void;
 }
@@ -114,6 +115,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/dashboard');
   }, [router]);
 
+  const loginWithQr = useCallback(async (token: string) => {
+    const res = await fetch('/api/auth/qr-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    if (!res.ok) {
+      const body = await res.json() as { error?: string };
+      throw new Error(body.error ?? 'QR login failed');
+    }
+
+    const data = await res.json() as { accessToken: string; refreshToken: string; user: AuthUser };
+    saveSession(data.accessToken, data.refreshToken, data.user);
+    setAccessToken(data.accessToken);
+    setUser(data.user);
+    router.push('/dashboard');
+  }, [router]);
+
   const register = useCallback(async (name: string, email: string, password: string) => {
     const res = await fetch('/api/auth/register', {
       method:  'POST',
@@ -139,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   return (
-    <AuthContext.Provider value={{ user, accessToken, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, accessToken, loading, login, loginWithQr, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
