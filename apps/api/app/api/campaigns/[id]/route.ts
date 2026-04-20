@@ -3,6 +3,7 @@ import { connectDb } from '@/lib/db/connection';
 import { Campaign } from '@/lib/db/models/Campaign';
 import { AuditLog } from '@/lib/db/models/AuditLog';
 import { withAuth } from '@/lib/auth/rbac';
+import { presentCampaign } from '@/lib/campaigns/presentation';
 import { UpdateCampaignSchema } from '@dialer/shared';
 import type { JwtPayload } from '@/lib/auth/jwt';
 
@@ -22,7 +23,7 @@ export const GET = withAuth(async (req: NextRequest, user: JwtPayload, { params 
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  return NextResponse.json({ data: campaign });
+  return NextResponse.json({ data: presentCampaign(campaign) });
 });
 
 // PUT /api/campaigns/:id

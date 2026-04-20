@@ -6,6 +6,7 @@ import { DncList } from '@/lib/db/models/DncList';
 import { AuditLog } from '@/lib/db/models/AuditLog';
 import { withAuth } from '@/lib/auth/rbac';
 import { enqueuePendingCampaignContacts } from '@/lib/campaigns/enqueue-pending-contacts';
+import { presentCampaign } from '@/lib/campaigns/presentation';
 import { CreateCampaignSchema, PaginationSchema, parsePastedPhoneInput } from '@dialer/shared';
 import { createHash } from 'node:crypto';
 import type { JwtPayload } from '@/lib/auth/jwt';
@@ -87,8 +88,8 @@ export const GET = withAuth(async (req: NextRequest, user: JwtPayload) => {
 
     const { searchParams } = new URL(req.url);
     const pagination = PaginationSchema.parse({
-      page: searchParams.get('page'),
-      limit: searchParams.get('limit'),
+      page: searchParams.get('page') ?? undefined,
+      limit: searchParams.get('limit') ?? undefined,
       sortBy: searchParams.get('sortBy') ?? 'createdAt',
       sortOrder: searchParams.get('sortOrder') ?? 'desc',
     });
@@ -111,7 +112,7 @@ export const GET = withAuth(async (req: NextRequest, user: JwtPayload) => {
     ]);
 
     return NextResponse.json({
-      data: campaigns,
+      data: campaigns.map((campaign) => presentCampaign(campaign)),
       pagination: {
         page: pagination.page,
         limit: pagination.limit,
@@ -215,7 +216,7 @@ export const POST = withAuth(
       });
 
       return NextResponse.json({
-        data: campaign,
+        data: presentCampaign(campaign.toObject()),
         importStats: preparedContacts.stats,
         contactsEnqueued,
       }, { status: 201 });
