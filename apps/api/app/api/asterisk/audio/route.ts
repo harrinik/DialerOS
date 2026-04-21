@@ -67,13 +67,31 @@ export const POST = withUser(async (req: NextRequest, user: JwtPayload) => {
   await writeFile(tmpPath, buf);
 
   // Ensure output dir exists on the Asterisk sounds path
-  if (!existsSync(outDir)) await mkdir(outDir, { recursive: true });
+  if (!existsSync(outDir)) {
+    try {
+      await mkdir(outDir, { recursive: true });
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      if (e.code === 'EACCES' || e.code === 'EPERM') {
+        return NextResponse.json({
+          error: `Permission denied creating ${outDir}. Run on your server:\n\nsudo mkdir -p ${outDir}\nsudo chmod -R 777 ${s.soundsDir}`,
+        }, { status: 500 });
+      }
+      throw err;
+    }
+  }
 
   // Convert to Asterisk-compatible WAV (8kHz, 16-bit, mono)
   let durationSecs = 0;
   try {
     durationSecs = await convertToAsteriskWav(tmpPath, outPath);
   } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === 'EACCES' || e.code === 'EPERM') {
+      return NextResponse.json({
+        error: `Permission denied writing to ${outPath}. Run on your server:\n\nsudo chmod -R 777 ${s.soundsDir}`,
+      }, { status: 500 });
+    }
     return NextResponse.json({ error: `Audio conversion failed: ${String(err)}` }, { status: 500 });
   }
 
