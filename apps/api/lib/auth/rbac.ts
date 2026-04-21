@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { verifyAccessToken, extractBearerToken, type JwtPayload } from './jwt';
 import type { UserRole } from '@dialer/shared';
 
+const isDev = process.env['NODE_ENV'] === 'development';
+
 /**
  * withAuth — RBAC middleware factory for Next.js App Router route handlers.
  *
@@ -40,7 +42,13 @@ export function withAuth<C = unknown>(
       );
     }
 
-    return handler(req, user, context);
+    try {
+      return await handler(req, user, context);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isDev) console.error('[withAuth] Unhandled route error:', err);
+      return NextResponse.json({ error: message || 'Internal server error' }, { status: 500 });
+    }
   };
 }
 

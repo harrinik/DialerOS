@@ -13,6 +13,9 @@ import { Phone, CheckCircle2, Play, Pause, ArrowLeft, Calendar, ChevronDown, Che
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+interface IvrFlowOption { _id: string; name: string; isDeployed: boolean; }
 
 interface Campaign {
   _id: string; name: string; status: string; callerIdName: string; callerIdNumber: string;
@@ -108,6 +111,9 @@ export default function CampaignDetailPage() {
   const [savingCalendar, setSavingCalendar] = useState(false);
   const [calendarForm, setCalendarForm] = useState({ timezone: 'UTC', startTime: '', endTime: '' });
   const [expandedCalls, setExpandedCalls] = useState<Record<string, boolean>>({});
+  const [ivrFlows, setIvrFlows] = useState<IvrFlowOption[]>([]);
+  const [selectedIvrFlowId, setSelectedIvrFlowId] = useState<string>('');
+  const [savingIvr, setSavingIvr] = useState(false);
 
   const token = () => localStorage.getItem('dialer_access_token') ?? '';
 
@@ -147,6 +153,42 @@ export default function CampaignDetailPage() {
     const interval = setInterval(() => { void fetchCampaign(); }, 5000);
     return () => clearInterval(interval);
   }, [campaign?.status, id]);
+
+  // Sync IVR picker when campaign loads
+  useEffect(() => {
+    if (campaign) setSelectedIvrFlowId(campaign.ivrFlowId?._id ?? '');
+  }, [campaign?._id]);
+
+  // Fetch available IVR flows for the picker
+  useEffect(() => {
+    fetch('/api/ivr-flows', { headers: { Authorization: `Bearer ${token()}` } })
+      .then((r) => r.json() as Promise<{ data: IvrFlowOption[] }>)
+      .then((d) => setIvrFlows(d.data ?? []))
+      .catch(() => null);
+  }, []);
+
+  const [ivrSaveError, setIvrSaveError] = useState<string | null>(null);
+  const [ivrSaveOk, setIvrSaveOk] = useState(false);
+
+  const saveIvrFlow = async () => {
+    setSavingIvr(true); setIvrSaveError(null); setIvrSaveOk(false);
+    try {
+      const r = await fetch(`/api/campaigns/${id}/ivr`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ivrFlowId: selectedIvrFlowId || null }),
+      });
+      const d = await r.json() as { error?: string };
+      if (!r.ok) { setIvrSaveError(d.error ?? 'Save failed'); return; }
+      setIvrSaveOk(true);
+      setTimeout(() => setIvrSaveOk(false), 3000);
+      await fetchCampaign();
+    } catch (err) {
+      setIvrSaveError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setSavingIvr(false);
+    }
+  };
 
   const handleToggle = async () => {
     if (!campaign) return;
@@ -302,13 +344,12 @@ export default function CampaignDetailPage() {
         <Card>
           <CardHeader><CardTitle className="text-base">Configuration</CardTitle></CardHeader>
           <Separator />
-          <CardContent className="pt-4">
+          <CardContent className="pt-4 space-y-3">
             <div className="space-y-2">
               {[
                 ['Concurrency', `${campaign.concurrency}× simultaneous`],
                 ['AMD Action', campaign.amdAction],
                 ['Max Retries', String(campaign.maxRetries)],
-                ['IVR Flow', campaign.ivrFlowId?.name ?? 'Direct route'],
                 ['Caller ID', `${campaign.callerIdName} <${campaign.callerIdNumber}>`],
                 ['SIP Trunk', campaign.sipTrunk],
               ].map(([k, v]) => (
@@ -317,6 +358,34 @@ export default function CampaignDetailPage() {
                   <p className="break-all text-xs font-mono text-foreground">{v}</p>
                 </div>
               ))}
+            </div>
+            {/* IVR Flow picker */}
+            <div className="rounded-md border border-border/60 px-3 py-2 space-y-2">
+              <p className="text-xs text-muted-foreground">IVR Flow</p>
+              <div className="flex items-center gap-2">
+                <Select value={selectedIvrFlowId} onValueChange={(v) => setSelectedIvrFlowId(v === 'none' ? '' : v)}>
+                  <SelectTrigger className="h-8 text-xs flex-1">
+                    <SelectValue placeholder="No IVR — direct routing" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No IVR — direct routing</SelectItem>
+                    {ivrFlows.map((f) => (
+                      <SelectItem key={f._id} value={f._id}>
+                        {f.name}{f.isDeployed ? '' : ' (draft)'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="secondary" className="h-8 text-xs" disabled={savingIvr} onClick={() => void saveIvrFlow()}>
+                  {savingIvr ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+              {ivrSaveOk && <p className="text-xs text-success">✓ IVR flow saved</p>}
+              {ivrSaveError && <p className="text-xs text-destructive">{ivrSaveError}</p>}
+              <p className="text-xs text-muted-foreground">
+                Callers hear this IVR on answer. Build flows in the{' '}
+                <a href="/dashboard/ivr-builder" className="underline text-primary">IVR Builder</a>.
+              </p>
             </div>
           </CardContent>
         </Card>
