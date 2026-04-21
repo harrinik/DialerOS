@@ -28,7 +28,7 @@ export const PATCH = withAuth(
       return NextResponse.json({ error: 'ivrFlowId is required' }, { status: 400 });
     }
 
-    campaign.ivrFlowId = body.ivrFlowId ?? undefined;
+    campaign.set('ivrFlowId', body.ivrFlowId ?? null);
     await campaign.save();
 
     return NextResponse.json({ data: { ivrFlowId: campaign.ivrFlowId } });
