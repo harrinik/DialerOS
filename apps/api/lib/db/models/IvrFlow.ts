@@ -12,6 +12,7 @@ interface IvrStep {
     | 'play'
     | 'dtmf_collect'
     | 'route_agent'
+    | 'transfer'
     | 'webhook'
     | 'hangup'
     | 'condition';
@@ -24,6 +25,8 @@ interface IvrStep {
   branches?: IvrStepBranch[];
   agentPool?: string[];
   agentSelectionStrategy?: 'round_robin' | 'least_busy' | 'random';
+  transferTo?: string;
+  transferTrunk?: string;
   webhookUrl?: string;
   webhookMethod?: 'GET' | 'POST';
   webhookHeaders?: Record<string, string>;
@@ -63,6 +66,7 @@ const IvrStepSchema = new mongoose.Schema<IvrStep>(
         'play',
         'dtmf_collect',
         'route_agent',
+        'transfer',
         'webhook',
         'hangup',
         'condition',
@@ -81,6 +85,8 @@ const IvrStepSchema = new mongoose.Schema<IvrStep>(
       type: String,
       enum: ['round_robin', 'least_busy', 'random'],
     },
+    transferTo: String,
+    transferTrunk: String,
     webhookUrl: String,
     webhookMethod: { type: String, enum: ['GET', 'POST'] },
     webhookHeaders: { type: Map, of: String },

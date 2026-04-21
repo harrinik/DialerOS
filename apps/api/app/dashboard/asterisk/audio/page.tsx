@@ -45,15 +45,25 @@ export default function AudioLibraryPage() {
   const upload = async () => {
     if (!selectedFile || !uploadName) return;
     setUploading(true); setError('');
-    const fd = new FormData();
-    fd.append('file', selectedFile);
-    fd.append('name', uploadName);
-    fd.append('category', uploadCategory);
-    const r = await fetch('/api/asterisk/audio', { method: 'POST', headers: h(), body: fd });
-    const d = await r.json() as { data?: AudioFile; error?: string };
-    setUploading(false);
-    if (d.error) setError(d.error);
-    else { setSelectedFile(null); setUploadName(''); if (fileInputRef.current) fileInputRef.current.value = ''; load(); }
+    try {
+      const fd = new FormData();
+      fd.append('file', selectedFile);
+      fd.append('name', uploadName);
+      fd.append('category', uploadCategory);
+      const r = await fetch('/api/asterisk/audio', { method: 'POST', headers: h(), body: fd });
+      const d = await r.json() as { data?: AudioFile; error?: string };
+      if (!r.ok || d.error) {
+        setError(d.error ?? `Upload failed (HTTP ${r.status}). Check Asterisk settings.`);
+      } else {
+        setSelectedFile(null); setUploadName('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        load();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed — check your connection and try again.');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const remove = async (id: string) => {

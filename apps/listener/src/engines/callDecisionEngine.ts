@@ -433,6 +433,9 @@ export class CallDecisionEngine {
 
     this.emitCallEvent({ type: 'call:ended', callLogId: ctx.callLogId, contactId: ctx.contactId, campaignId: ctx.campaignId, channelId, disposition, duration });
 
+    // Auto-complete campaign when all contacts are done
+    void this.checkCampaignCompletion(ctx.campaignId);
+
     // Transition agent to wrapup state (if one was routed)
     if (callLog?.routedToAgentId) {
       const agent = await Agent.findById(callLog.routedToAgentId).lean();
@@ -610,6 +613,18 @@ export class CallDecisionEngine {
         await this.routeToAgent(channelId, freshCtx, step.agentPool ?? []);
         break;
 
+      case 'transfer': {
+        const dest = step.transferTo;
+        if (!dest) {
+          logger.error({ stepId: step.id }, 'Transfer step missing transferTo — hanging up');
+          await this.setFailureInfo(ctx.callLogId, 'transfer', 'Transfer step has no destination configured.');
+          await this.ari.hangupChannel(channelId, 'normal');
+          return;
+        }
+        await this.transferToExternal(channelId, freshCtx, dest, step.transferTrunk);
+        break;
+      }
+
       case 'webhook':
         await this.fireWebhook(channelId, freshCtx, step, flow);
         break;
@@ -620,6 +635,117 @@ export class CallDecisionEngine {
 
       default:
         logger.warn({ stepType: step.type }, 'Unknown IVR step type');
+    }
+  }
+
+  // ---- External Transfer (3CX ring group / SIP forward) -----------------
+
+  private async transferToExternal(
+    channelId: string,
+    ctx: ChannelContext,
+    destination: string,
+    overrideTrunk?: string,
+  ): Promise<void> {
+    const campaign = await Campaign.findById(ctx.campaignId)
+      .select('sipTrunk callerIdName callerIdNumber')
+      .lean();
+    const trunk = overrideTrunk ?? (campaign?.sipTrunk as string | undefined);
+    if (!trunk) {
+      await this.setFailureInfo(ctx.callLogId, 'transfer', 'No SIP trunk available for transfer.');
+      await this.ari.hangupChannel(channelId, 'normal');
+      return;
+    }
+
+    await this.appendTrace(
+      ctx.callLogId, 'transfer_start', 'info',
+      'Transferring call to external destination',
+      `Dialing ${destination} via trunk ${trunk}.`,
+    );
+
+    const dialEndpoint = trunk.includes('/') ? `${trunk}/${destination}` : `PJSIP/${destination}@${trunk}`;
+    const transferChannelId = `transfer-${Date.now()}`;
+    const callerIdName = (campaign?.callerIdName as string | undefined) ?? 'Dialer';
+    const callerIdNumber = (campaign?.callerIdNumber as string | undefined) ?? '';
+
+    try {
+      await this.ari.originateCall({
+        endpoint: dialEndpoint,
+        app: process.env['ARI_APP_NAME'] ?? 'dialer',
+        appArgs: 'transfer_leg',
+        callerId: `"${callerIdName}" <${callerIdNumber}>`,
+        timeout: 30,
+        channelId: transferChannelId,
+        variables: { DIALER_IS_TRANSFER_LEG: '1', DIALER_CALLLOG_ID: ctx.callLogId },
+      });
+
+      const bridge = await this.ari.createBridge('mixing', `transfer-${ctx.callLogId}`);
+      ctx.bridgeId = bridge.id;
+      await this.setChannelContext(channelId, ctx);
+      await this.ari.addChannelsToBridge(bridge.id, [channelId]);
+
+      // Mark transfer leg so onChannelDestroyed skips double-cleanup
+      await this.setChannelContext(transferChannelId, {
+        callLogId: ctx.callLogId,
+        contactId: ctx.contactId,
+        campaignId: ctx.campaignId,
+        amdAction: ctx.amdAction,
+        isAgentLeg: true,
+        bridgeId: bridge.id,
+      });
+
+      await CallLog.updateOne({ _id: ctx.callLogId }, { $set: { disposition: 'answered' } });
+      await this.appendTrace(
+        ctx.callLogId, 'transfer_complete', 'success',
+        'Call transferred to external destination',
+        `Bridge ${bridge.id} connected customer to ${destination}.`,
+      );
+      this.emitCallEvent({
+        type: 'call:routed',
+        callLogId: ctx.callLogId,
+        contactId: ctx.contactId,
+        campaignId: ctx.campaignId,
+        channelId,
+      });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      logger.error({ err, destination, trunk }, 'Transfer to external destination failed');
+      await this.setFailureInfo(
+        ctx.callLogId, 'transfer', reason,
+        `Transfer to ${destination} via ${trunk} failed.`,
+      );
+      await Promise.allSettled([
+        this.ari.hangupChannel(channelId, 'normal'),
+        this.ari.hangupChannel(transferChannelId, 'normal'),
+      ]);
+      if (ctx.bridgeId) await this.ari.destroyBridge(ctx.bridgeId).catch(() => null);
+    }
+  }
+
+  // ---- Campaign completion check ----------------------------------------
+
+  private async checkCampaignCompletion(campaignId: string): Promise<void> {
+    try {
+      const campaign = await Campaign.findById(campaignId).select('status').lean();
+      if (!campaign || campaign.status !== 'running') return;
+
+      const remaining = await Contact.countDocuments({
+        campaignId,
+        status: { $in: ['pending', 'dialing', 'retry_scheduled'] },
+      });
+
+      if (remaining === 0) {
+        const updated = await Campaign.findOneAndUpdate(
+          { _id: campaignId, status: 'running' },
+          { $set: { status: 'completed' } },
+          { new: true },
+        ).lean();
+        if (updated) {
+          logger.info({ campaignId }, 'Campaign auto-completed — all contacts processed');
+          await this.emitCampaignStats(campaignId);
+        }
+      }
+    } catch (err) {
+      logger.error({ err, campaignId }, 'Error in checkCampaignCompletion');
     }
   }
 

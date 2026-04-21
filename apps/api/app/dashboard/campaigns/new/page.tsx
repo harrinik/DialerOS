@@ -28,6 +28,12 @@ interface TrunkOption {
   state: string;
 }
 
+interface IvrFlowOption {
+  _id: string;
+  name: string;
+  isDeployed: boolean;
+}
+
 interface FormState {
   name: string;
   description: string;
@@ -38,6 +44,7 @@ interface FormState {
   concurrency: number;
   ratePerSecond: number;
   amdAction: 'hangup' | 'continue';
+  ivrFlowId: string;
   timezone: string;
   startTime: string;
   endTime: string;
@@ -54,6 +61,7 @@ const DEFAULTS: FormState = {
   concurrency: 5,
   ratePerSecond: 1,
   amdAction: 'hangup',
+  ivrFlowId: '',
   timezone: 'UTC',
   startTime: '',
   endTime: '',
@@ -72,6 +80,7 @@ export default function NewCampaignPage() {
   const [trunks, setTrunks] = useState<TrunkOption[]>([]);
   const [trunksLoading, setTrunksLoading] = useState(true);
   const [trunksError, setTrunksError] = useState<string | null>(null);
+  const [ivrFlows, setIvrFlows] = useState<IvrFlowOption[]>([]);
 
   const set = <K extends keyof FormState>(key: K, val: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: val }));
@@ -121,6 +130,14 @@ export default function NewCampaignPage() {
   }, [accessToken]);
 
   useEffect(() => {
+    if (!accessToken) return;
+    fetch('/api/ivr-flows', { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then((r) => r.json() as Promise<{ data: IvrFlowOption[] }>)
+      .then((d) => setIvrFlows(d.data ?? []))
+      .catch(() => null);
+  }, [accessToken]);
+
+  useEffect(() => {
     setForm((prev) => {
       if (prev.sipTrunk && !activeTrunks.some((trunk) => trunk.id === prev.sipTrunk)) {
         return { ...prev, sipTrunk: '' };
@@ -163,6 +180,7 @@ export default function NewCampaignPage() {
       };
 
       if (form.description.trim()) payload.description = form.description.trim();
+      if (form.ivrFlowId) payload.ivrFlowId = form.ivrFlowId;
       if (form.startTime) payload.startTime = form.startTime;
       if (form.endTime) payload.endTime = form.endTime;
       if (numbersText) payload.numbersText = numbersText;
@@ -431,6 +449,26 @@ export default function NewCampaignPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>IVR Flow (optional)</Label>
+              <Select value={form.ivrFlowId} onValueChange={(value) => set('ivrFlowId', value === 'none' ? '' : value)}>
+                <SelectTrigger><SelectValue placeholder="No IVR — route directly to agent" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No IVR — direct agent routing</SelectItem>
+                  {ivrFlows.map((f) => (
+                    <SelectItem key={f._id} value={f._id}>
+                      {f.name}{f.isDeployed ? '' : ' (draft)'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                When set, callers hear this IVR before being routed. Use the{' '}
+                <a href="/dashboard/ivr-builder" className="underline">IVR Builder</a>{' '}
+                to create a flow with a Play → Forward Call sequence for 3CX ring groups.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

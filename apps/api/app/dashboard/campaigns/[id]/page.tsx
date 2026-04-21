@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Phone, CheckCircle2, Play, Pause, ArrowLeft, Calendar, ChevronDown, ChevronRight, AlertCircle, CircleDot } from 'lucide-react';
+import { Phone, CheckCircle2, Play, Pause, ArrowLeft, Calendar, ChevronDown, ChevronRight, AlertCircle, CircleDot, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -141,6 +141,13 @@ export default function CampaignDetailPage() {
     ]).finally(() => setLoading(false));
   }, [id]);
 
+  // Auto-poll every 5 s while the campaign is actively running
+  useEffect(() => {
+    if (campaign?.status !== 'running') return;
+    const interval = setInterval(() => { void fetchCampaign(); }, 5000);
+    return () => clearInterval(interval);
+  }, [campaign?.status, id]);
+
   const handleToggle = async () => {
     if (!campaign) return;
     setActionPending(true);
@@ -188,6 +195,9 @@ export default function CampaignDetailPage() {
 
   const total = campaign.stats.total || 1;
   const answerRate = campaign.stats.total > 0 ? ((campaign.stats.answered / campaign.stats.total) * 100).toFixed(1) : '0.0';
+  const dialedPct = campaign.stats.total > 0
+    ? Math.min(100, ((campaign.stats.answered + campaign.stats.machines + campaign.stats.failed + campaign.stats.busy + campaign.stats.noAnswer) / campaign.stats.total) * 100)
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -214,6 +224,34 @@ export default function CampaignDetailPage() {
           </Button>
         )}
       </div>
+
+      {/* Running / processing banner */}
+      {campaign.status === 'running' && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 space-y-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-primary">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Campaign is dialing — live stats refresh every 5 seconds
+          </div>
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Progress</span>
+              <span>{dialedPct.toFixed(1)}% of {campaign.stats.total.toLocaleString()} contacts dialed</span>
+            </div>
+            <Progress value={dialedPct} className="h-1.5" />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {campaign.stats.pending > 0
+              ? `${campaign.stats.pending.toLocaleString()} contacts still pending. Campaign will auto-complete when all are processed.`
+              : 'All contacts have been dispatched. Waiting for active calls to finish…'}
+          </p>
+        </div>
+      )}
+      {campaign.status === 'completed' && (
+        <div className="rounded-lg border border-success/30 bg-success/5 px-4 py-3 flex items-center gap-2 text-sm text-success">
+          <CheckCircle2 className="h-4 w-4" />
+          Campaign completed — all contacts have been processed.
+        </div>
+      )}
 
       {/* KPI row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

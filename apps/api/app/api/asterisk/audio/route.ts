@@ -5,11 +5,14 @@ import { join, extname } from 'path';
 import { tmpdir } from 'os'; // cross-platform temp dir
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
+
 import { connectDb } from '@/lib/db/connection';
 import { AudioFile } from '@/lib/db/models/AudioFile';
 import { AsteriskSettings } from '@/lib/db/models/AsteriskSettings';
 import { withUser } from '@/lib/auth/rbac';
 import type { JwtPayload } from '@/lib/auth/jwt';
+
+export const maxDuration = 120; // allow up to 2 min for ffmpeg conversion
 
 if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
 

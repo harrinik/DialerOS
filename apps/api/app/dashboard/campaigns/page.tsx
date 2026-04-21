@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { Phone, Search, Play, Pause, Plus } from 'lucide-react';
+import { Phone, Search, Play, Pause, Plus, Loader2 } from 'lucide-react';
 
 interface Campaign {
   _id: string; name: string; status: string; callerIdName: string;
@@ -42,6 +42,14 @@ export default function CampaignsPage() {
   };
 
   useEffect(() => { fetchCampaigns(); }, [filter.status]);
+
+  // Auto-refresh every 10 s while any campaign is running
+  useEffect(() => {
+    const hasRunning = campaigns.some((c) => c.status === 'running');
+    if (!hasRunning) return;
+    const id = setInterval(() => { fetchCampaigns(); }, 10_000);
+    return () => clearInterval(id);
+  }, [campaigns]);
 
   const toggleStatus = async (id: string, current: string) => {
     const action = current === 'running' ? 'pause' : 'start';
@@ -128,7 +136,10 @@ export default function CampaignsPage() {
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={STATUS_BADGE[c.status] ?? 'secondary'}>{c.status}</Badge>
+                      <div className="flex items-center gap-1.5">
+                        {c.status === 'running' && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                        <Badge variant={STATUS_BADGE[c.status] ?? 'secondary'}>{c.status}</Badge>
+                      </div>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground font-mono">
                       <span className="block">{c.callerIdName}</span>

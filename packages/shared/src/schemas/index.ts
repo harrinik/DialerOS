@@ -124,6 +124,7 @@ export const IvrStepSchema = z.object({
     'play',
     'dtmf_collect',
     'route_agent',
+    'transfer',
     'webhook',
     'hangup',
     'condition',
@@ -142,6 +143,9 @@ export const IvrStepSchema = z.object({
   agentSelectionStrategy: z
     .enum(['round_robin', 'least_busy', 'random'])
     .optional(),
+  // transfer (SIP forward to external number / 3CX ring group)
+  transferTo: z.string().optional(),
+  transferTrunk: z.string().optional(),
   // webhook
   webhookUrl: z.string().url().optional(),
   webhookMethod: z.enum(['GET', 'POST']).optional(),

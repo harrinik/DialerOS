@@ -13,12 +13,14 @@ export interface IvrBranch {
 
 export interface IvrStep {
   id: string;
-  type: 'play' | 'dtmf_collect' | 'route_agent' | 'webhook' | 'hangup' | string;
+  type: 'play' | 'dtmf_collect' | 'route_agent' | 'transfer' | 'webhook' | 'hangup' | string;
   audioFile?: string;
   nextStepId?: string;
   maxDigits?: number;
   timeoutSeconds?: number;
   agentPool?: string[];
+  transferTo?: string;
+  transferTrunk?: string;
   webhookUrl?: string;
   webhookMethod?: string;
   webhookHeaders?: Record<string, string>;
@@ -60,6 +62,8 @@ const IvrStepSchema = new mongoose.Schema(
     maxDigits:       Number,
     timeoutSeconds:  Number,
     agentPool:       [String],
+    transferTo:      String,
+    transferTrunk:   String,
     webhookUrl:      String,
     webhookMethod:   String,
     webhookHeaders:  mongoose.Schema.Types.Mixed,
