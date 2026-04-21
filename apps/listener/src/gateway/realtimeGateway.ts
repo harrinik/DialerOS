@@ -24,11 +24,17 @@ export class RealtimeGateway {
 
   constructor() {
     const httpServer = createServer();
+    // Allow any origin — clients connect from whatever IP/hostname the browser sees.
+    // GATEWAY_CORS_ORIGIN can be set to a comma-separated list for stricter control.
+    const corsOrigin = process.env['GATEWAY_CORS_ORIGIN']
+      ? process.env['GATEWAY_CORS_ORIGIN'].split(',').map((s) => s.trim())
+      : true; // true = reflect request origin (equivalent to '*' without credential issues)
+
     this.io = new SocketIOServer(httpServer, {
       cors: {
-        origin: process.env['API_BASE_URL'] ?? 'http://localhost:3000',
+        origin: corsOrigin,
         methods: ['GET', 'POST'],
-        credentials: true,
+        credentials: false,
       },
       transports: ['websocket', 'polling'],
     });
