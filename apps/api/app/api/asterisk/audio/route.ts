@@ -3,6 +3,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, extname } from 'path';
 import { tmpdir } from 'os'; // cross-platform temp dir
+import { execSync } from 'child_process';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
 
@@ -14,7 +15,16 @@ import type { JwtPayload } from '@/lib/auth/jwt';
 
 export const maxDuration = 120; // allow up to 2 min for ffmpeg conversion
 
-if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
+// Prefer system ffmpeg (reliable in Docker/standalone) over the npm-bundled binary.
+// ffmpeg-static's path breaks in Next.js standalone builds because the binary
+// isn't copied into the output directory.
+try {
+  const systemFfmpeg = execSync('which ffmpeg', { encoding: 'utf8' }).trim();
+  if (systemFfmpeg) ffmpeg.setFfmpegPath(systemFfmpeg);
+} catch {
+  // Not in PATH — fall back to ffmpeg-static (works in local dev)
+  if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
+}
 
 async function convertToAsteriskWav(inputPath: string, outputPath: string): Promise<number> {
   return new Promise((resolve, reject) => {

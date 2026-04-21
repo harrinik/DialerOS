@@ -39,6 +39,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Install ffmpeg for audio conversion (ffmpeg-static binary is not
+# preserved in Next.js standalone output, so we need the system package)
+RUN apk add --no-cache ffmpeg
+
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs \
  && adduser  --system --uid 1001 nextjs
