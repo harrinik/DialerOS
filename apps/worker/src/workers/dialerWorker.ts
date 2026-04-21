@@ -450,7 +450,8 @@ export function createDialerWorker(redis: Redis): Worker {
 
         // 5. Originate call
         try {
-          const dialEndpoint = sipTrunk.includes('/') ? `${sipTrunk}/${phone}` : `PJSIP/${sipTrunk}/${phone}`;
+          // PJSIP dial strings for outbound trunks require the format: PJSIP/number@endpoint
+          const dialEndpoint = sipTrunk.includes('/') ? `${sipTrunk}/${phone}` : `PJSIP/${phone}@${sipTrunk}`;
           await ari.originateCall({
             endpoint: dialEndpoint,
             app: process.env['ARI_APP_NAME'] ?? 'dialer',
