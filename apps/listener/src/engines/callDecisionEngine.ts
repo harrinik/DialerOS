@@ -178,8 +178,31 @@ export class CallDecisionEngine {
 
     // AriEvent.args: use type assertion since the shared type is flexible
     const args = (event as unknown as { args?: string[] }).args ?? [];
+
     if (args.includes('agent_leg')) {
       logger.info({ channelId }, 'Agent leg entered Stasis');
+      return;
+    }
+
+    // Transfer leg: add to the bridge that is already holding the customer channel
+    if (args.includes('transfer_leg')) {
+      const tCtx = await this.getChannelContext(channelId);
+      if (tCtx?.bridgeId) {
+        logger.info({ channelId, bridgeId: tCtx.bridgeId }, 'Transfer leg entered Stasis — joining bridge');
+        await this.ari.addChannelsToBridge(tCtx.bridgeId, [channelId]).catch((err) =>
+          logger.error({ err, channelId }, 'Failed to add transfer leg to bridge'),
+        );
+        await this.appendTrace(
+          tCtx.callLogId,
+          'transfer_bridged',
+          'success',
+          'Transfer call connected',
+          `Transfer leg ${channelId} joined bridge ${tCtx.bridgeId}.`,
+        );
+      } else {
+        logger.warn({ channelId }, 'Transfer leg entered Stasis but no bridgeId in context — hanging up');
+        await this.ari.hangupChannel(channelId, 'normal');
+      }
       return;
     }
 
@@ -560,7 +583,8 @@ export class CallDecisionEngine {
     switch (step.type) {
       case 'play': {
         if (step.audioFile) {
-          const pb = await this.ari.playAudio(channelId, `sound:${step.audioFile}`);
+          const soundsSubdir = process.env['SOUNDS_SUBDIR'] ?? 'dialer';
+          const pb = await this.ari.playAudio(channelId, `sound:${soundsSubdir}/${step.audioFile}`);
           freshCtx.playbackId = pb.id;
           freshCtx.currentStepId = step.id;
           await this.setChannelContext(channelId, freshCtx);
@@ -571,7 +595,8 @@ export class CallDecisionEngine {
 
       case 'dtmf_collect': {
         if (step.audioFile) {
-          const pb = await this.ari.playAudio(channelId, `sound:${step.audioFile}`);
+          const soundsSubdir = process.env['SOUNDS_SUBDIR'] ?? 'dialer';
+          const pb = await this.ari.playAudio(channelId, `sound:${soundsSubdir}/${step.audioFile}`);
           freshCtx.playbackId = pb.id;
         }
         freshCtx.currentStepId = step.id;
@@ -668,6 +693,23 @@ export class CallDecisionEngine {
     const callerIdNumber = (campaign?.callerIdNumber as string | undefined) ?? '';
 
     try {
+      // Create bridge first so we have an ID before the transfer leg can answer
+      const bridge = await this.ari.createBridge('mixing', `transfer-${ctx.callLogId}`);
+      ctx.bridgeId = bridge.id;
+      await this.setChannelContext(channelId, ctx);
+      await this.ari.addChannelsToBridge(bridge.id, [channelId]);
+
+      // Store transfer leg context BEFORE originating — avoids race where channel
+      // enters Stasis before context is written (transfer_leg handler reads bridgeId)
+      await this.setChannelContext(transferChannelId, {
+        callLogId: ctx.callLogId,
+        contactId: ctx.contactId,
+        campaignId: ctx.campaignId,
+        amdAction: ctx.amdAction,
+        isAgentLeg: true,
+        bridgeId: bridge.id,
+      });
+
       await this.ari.originateCall({
         endpoint: dialEndpoint,
         app: process.env['ARI_APP_NAME'] ?? 'dialer',
@@ -676,21 +718,6 @@ export class CallDecisionEngine {
         timeout: 30,
         channelId: transferChannelId,
         variables: { DIALER_IS_TRANSFER_LEG: '1', DIALER_CALLLOG_ID: ctx.callLogId },
-      });
-
-      const bridge = await this.ari.createBridge('mixing', `transfer-${ctx.callLogId}`);
-      ctx.bridgeId = bridge.id;
-      await this.setChannelContext(channelId, ctx);
-      await this.ari.addChannelsToBridge(bridge.id, [channelId]);
-
-      // Mark transfer leg so onChannelDestroyed skips double-cleanup
-      await this.setChannelContext(transferChannelId, {
-        callLogId: ctx.callLogId,
-        contactId: ctx.contactId,
-        campaignId: ctx.campaignId,
-        amdAction: ctx.amdAction,
-        isAgentLeg: true,
-        bridgeId: bridge.id,
       });
 
       await CallLog.updateOne({ _id: ctx.callLogId }, { $set: { disposition: 'answered' } });

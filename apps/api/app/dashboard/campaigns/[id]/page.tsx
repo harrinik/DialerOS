@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Phone, CheckCircle2, Play, Pause, ArrowLeft, Calendar, ChevronDown, ChevronRight, AlertCircle, CircleDot, Loader2 } from 'lucide-react';
+import { Phone, CheckCircle2, Play, Pause, ArrowLeft, Calendar, ChevronDown, ChevronRight, AlertCircle, CircleDot, Loader2, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -190,6 +190,18 @@ export default function CampaignDetailPage() {
     }
   };
 
+  const handleRestart = async () => {
+    if (!campaign) return;
+    if (!confirm('Re-dial all completed/failed contacts and restart the campaign?')) return;
+    setActionPending(true);
+    try {
+      await fetch(`/api/campaigns/${id}/restart`, { method: 'POST', headers: { Authorization: `Bearer ${token()}` } });
+      await fetchCampaign();
+    } finally {
+      setActionPending(false);
+    }
+  };
+
   const handleToggle = async () => {
     if (!campaign) return;
     setActionPending(true);
@@ -256,15 +268,22 @@ export default function CampaignDetailPage() {
           </div>
           <p className="text-sm text-muted-foreground">{campaign.callerIdName} · {campaign.callerIdNumber} · {campaign.sipTrunk}</p>
         </div>
-        {campaign.status !== 'completed' && campaign.status !== 'archived' && (
-          <Button disabled={actionPending} variant={campaign.status === 'running' ? 'secondary' : 'default'}
-            onClick={() => void handleToggle()}>
-            {campaign.status === 'running'
-              ? <><Pause className="h-4 w-4" /> Pause</>
-              : <><Play className="h-4 w-4 fill-current" /> Start</>
-            }
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {campaign.status !== 'completed' && campaign.status !== 'archived' && (
+            <Button disabled={actionPending} variant={campaign.status === 'running' ? 'secondary' : 'default'}
+              onClick={() => void handleToggle()}>
+              {campaign.status === 'running'
+                ? <><Pause className="h-4 w-4" /> Pause</>
+                : <><Play className="h-4 w-4 fill-current" /> Start</>
+              }
+            </Button>
+          )}
+          {(campaign.status === 'completed' || campaign.status === 'paused' || campaign.status === 'archived') && (
+            <Button disabled={actionPending} variant="secondary" onClick={() => void handleRestart()}>
+              <RotateCcw className="h-4 w-4" /> Restart
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Running / processing banner */}
