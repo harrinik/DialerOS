@@ -52,7 +52,9 @@ function PlayNode({ data, selected }: NodeProps) {
         <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'hsl(220,75%,65%)', textTransform: 'uppercase' }}>Play Audio</span>
       </div>
       <div style={{ fontSize: '0.8rem', color: 'hsl(220,15%,80%)' }}>
-        {data.audioFile ? `🔊 ${String(data.audioFile)}` : <span style={{ color: 'hsl(220,8%,50%)' }}>No audio set</span>}
+        {data.audioFile
+          ? <span>🔊 <span style={{ color: 'hsl(220,75%,75%)' }}>{String(data.audioFile).split('/').pop()}</span></span>
+          : <span style={{ color: 'hsl(220,8%,50%)' }}>No audio set</span>}
       </div>
       <Handle type="source" position={Position.Bottom} style={{ background: 'hsl(220,75%,50%)' }} />
     </div>
@@ -208,8 +210,6 @@ export default function IvrBuilderCanvasPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(NEW_FLOW_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState(NEW_FLOW_EDGES);
   const [flowName, setFlowName] = useState('New IVR Flow');
-  const [campaignId, setCampaignId] = useState('');
-  const [campaigns, setCampaigns] = useState<Array<{ _id: string; name: string }>>([]);
   const [audioFiles, setAudioFiles] = useState<AudioFileOption[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(!isNew);
@@ -218,28 +218,21 @@ export default function IvrBuilderCanvasPage() {
 
   const token = () => localStorage.getItem('dialer_access_token') ?? '';
 
-  // Load campaigns + audio files for pickers
+  // Load audio files for pickers
   useEffect(() => {
-    const t = token();
-    Promise.all([
-      fetch('/api/campaigns', { headers: { Authorization: `Bearer ${t}` } })
-        .then((r) => r.json() as Promise<{ data: Array<{ _id: string; name: string }> }>),
-      fetch('/api/asterisk/audio', { headers: { Authorization: `Bearer ${t}` } })
-        .then((r) => r.json() as Promise<{ data: AudioFileOption[] }>),
-    ]).then(([c, a]) => {
-      setCampaigns(c.data ?? []);
-      setAudioFiles(a.data ?? []);
-    }).catch(console.error);
+    fetch('/api/asterisk/audio', { headers: { Authorization: `Bearer ${token()}` } })
+      .then((r) => r.json() as Promise<{ data: AudioFileOption[] }>)
+      .then((a) => setAudioFiles(a.data ?? []))
+      .catch(console.error);
   }, []);
 
   // Load existing flow
   useEffect(() => {
     if (isNew) return;
     fetch(`/api/ivr-flows/${flowId}`, { headers: { Authorization: `Bearer ${token()}` } })
-      .then((r) => r.json() as Promise<{ data: { name: string; campaignId: string; steps: Array<Record<string, unknown>>; entryStepId: string } }>)
+      .then((r) => r.json() as Promise<{ data: { name: string; steps: Array<Record<string, unknown>>; entryStepId: string } }>)
       .then(({ data }) => {
         setFlowName(data.name);
-        setCampaignId(String(data.campaignId));
         // Convert stored steps back to React Flow nodes
         const loadedNodes: Node[] = (data.steps ?? []).map((s) => ({
           id: String(s['id']),
@@ -283,7 +276,7 @@ export default function IvrBuilderCanvasPage() {
         ...n.data,
       }));
       const startNode = nodes.find((n) => n.type === 'start');
-      const payload = { name: flowName, campaignId, entryStepId: startNode?.id ?? '', steps };
+      const payload = { name: flowName, entryStepId: startNode?.id ?? '', steps };
 
       const url = isNew ? '/api/ivr-flows' : `/api/ivr-flows/${flowId}`;
       const method = isNew ? 'POST' : 'PUT';
@@ -332,14 +325,6 @@ export default function IvrBuilderCanvasPage() {
               borderRadius: '8px', padding: '6px 12px', color: 'var(--color-text-primary)',
               width: '220px', fontSize: '0.875rem',
             }} />
-          <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)}
-            style={{
-              background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
-              borderRadius: '8px', padding: '6px 12px', color: 'var(--color-text-primary)', fontSize: '0.875rem',
-            }}>
-            <option value="">Select campaign...</option>
-            {campaigns.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
-          </select>
         </div>
 
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>

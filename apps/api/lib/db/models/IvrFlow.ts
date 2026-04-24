@@ -42,7 +42,7 @@ interface IvrStep {
 
 export interface IIvrFlow extends Document {
   name: string;
-  campaignId: mongoose.Types.ObjectId;
+  campaignId?: mongoose.Types.ObjectId;
   entryStepId: string;
   steps: IvrStep[];
   isDeployed: boolean;
@@ -111,7 +111,7 @@ const IvrFlowSchema = new mongoose.Schema<IIvrFlow>(
     campaignId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Campaign',
-      required: true,
+      required: false,
       index: true,
     },
     entryStepId: { type: String, required: true },

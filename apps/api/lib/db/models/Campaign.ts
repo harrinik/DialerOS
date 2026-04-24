@@ -19,6 +19,7 @@ export interface ICampaign extends Document {
     failed: RetryRule;
   };
   amdAction: 'hangup' | 'continue';
+  amdEnabled: boolean;
   ivrFlowId?: mongoose.Types.ObjectId;
   agentPool: mongoose.Types.ObjectId[];
   timezone: string;
@@ -97,7 +98,8 @@ const CampaignSchema = new mongoose.Schema<ICampaign>(
       noAnswer: { type: RetryRuleSchema, default: () => ({ maxAttempts: 3, delayMinutes: 30 }) },
       failed: { type: RetryRuleSchema, default: () => ({ maxAttempts: 1, delayMinutes: 60 }) },
     },
-    amdAction: { type: String, enum: ['hangup', 'continue'], default: 'hangup' },
+    amdAction:  { type: String, enum: ['hangup', 'continue'], default: 'hangup' },
+    amdEnabled: { type: Boolean, default: true },
     ivrFlowId: { type: mongoose.Schema.Types.ObjectId, ref: 'IvrFlow' },
     agentPool: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Agent' }],
     timezone: { type: String, default: 'UTC' },

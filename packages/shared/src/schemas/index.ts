@@ -50,6 +50,7 @@ export const CreateCampaignSchema = z.object({
       failed: { maxAttempts: 1, delayMinutes: 60 },
     }),
   amdAction: z.enum(['hangup', 'continue']).default('hangup'),
+  amdEnabled: z.boolean().default(true),
   ivrFlowId: z.string().optional(),
   agentPool: z.array(z.string()).default([]),
   timezone: z.string().default('UTC'),
@@ -167,7 +168,7 @@ export const IvrStepSchema = z.object({
 
 export const CreateIvrFlowSchema = z.object({
   name: z.string().min(1).max(255),
-  campaignId: z.string().min(1),
+  campaignId: z.string().optional(),
   entryStepId: z.string().min(1),
   steps: z.array(IvrStepSchema).min(1),
 });

@@ -39,10 +39,7 @@ export const POST = withUser(
     const resetResult = await Contact.updateMany(
       { campaignId: campaign._id, status: { $in: resetStatuses } },
       {
-        $set: {
-          status: 'pending',
-          nextRetryAt: null,
-        },
+        $set: { status: 'pending' },
         $unset: { nextRetryAt: '' },
       },
     );
